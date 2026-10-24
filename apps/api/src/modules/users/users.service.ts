@@ -8,7 +8,18 @@ import {
 } from '@talkdrop/shared';
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
-import { maskPhone } from '../../lib/crypto.js';
+import { decryptField, maskPhone } from '../../lib/crypto.js';
+import { loadConfig } from '../../config.js';
+
+function maskedStoredPhone(stored: string | null | undefined): string | null {
+  if (!stored) return null;
+  if (stored.startsWith('+')) return maskPhone(stored);
+  try {
+    return maskPhone(decryptField(stored, loadConfig().FIELD_ENCRYPTION_KEY));
+  } catch {
+    return '••••';
+  }
+}
 
 function profileFilters(profile: {
   filterCountries: string[];
@@ -51,7 +62,7 @@ export class UsersService {
     return {
       id: user.id,
       displayName: user.displayName,
-      phoneE164Masked: user.phoneE164 ? maskPhone(user.phoneE164) : null,
+      phoneE164Masked: maskedStoredPhone(user.phoneE164),
       ageVerified: user.ageVerified,
       trustScore: user.trustScore,
       trustTier: user.trustTier,

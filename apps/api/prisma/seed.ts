@@ -1,7 +1,19 @@
 import { PrismaClient } from '@prisma/client';
 import { INTERESTS } from '@talkdrop/shared';
+import { createHash } from 'node:crypto';
+import { encryptField } from '../src/lib/crypto.js';
 
 const prisma = new PrismaClient();
+
+function phoneHash(phone: string): string {
+  return createHash('sha256').update(phone.trim()).digest('hex');
+}
+
+function encPhone(phone: string): string {
+  const key =
+    process.env.FIELD_ENCRYPTION_KEY ?? 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+  return encryptField(phone, key);
+}
 
 const ICEBREAKERS = [
   'What song have you replayed all week?',
@@ -86,38 +98,49 @@ async function main() {
     mood: string;
     adminRole?: 'owner' | 'admin' | 'reviewer' | 'viewer';
   }) {
-    const user = await prisma.user.upsert({
-      where: { phoneE164: input.phone },
-      create: {
-        phoneE164: input.phone,
-        displayName: input.name,
-        ageVerified: true,
-        birthYearRange: '18-24',
-        trustTier: input.trustTier,
-        trustScore: input.trustScore,
-        streakDays: input.streak,
-        region: 'global',
-        country: input.city.split(' ').pop() ?? 'World',
-        tenantId: tenant.id,
-        profile: {
-          create: {
-            city: input.city,
-            languages: input.languages,
-            defaultMood: input.mood,
-            blurFirst: true,
-            captions: true,
+    const hash = phoneHash(input.phone);
+    const encrypted = encPhone(input.phone);
+    const existing =
+      (await prisma.user.findUnique({ where: { phoneHash: hash } })) ??
+      (await prisma.user.findUnique({ where: { phoneE164: input.phone } }));
+    const user = existing
+      ? await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            phoneE164: encrypted,
+            phoneHash: hash,
+            displayName: input.name,
+            ageVerified: true,
+            trustTier: input.trustTier,
+            trustScore: input.trustScore,
+            streakDays: input.streak,
+            tenantId: tenant.id,
           },
-        },
-      },
-      update: {
-        displayName: input.name,
-        ageVerified: true,
-        trustTier: input.trustTier,
-        trustScore: input.trustScore,
-        streakDays: input.streak,
-        tenantId: tenant.id,
-      },
-    });
+        })
+      : await prisma.user.create({
+          data: {
+            phoneE164: encrypted,
+            phoneHash: hash,
+            displayName: input.name,
+            ageVerified: true,
+            birthYearRange: '18-24',
+            trustTier: input.trustTier,
+            trustScore: input.trustScore,
+            streakDays: input.streak,
+            region: 'global',
+            country: input.city.split(' ').pop() ?? 'World',
+            tenantId: tenant.id,
+            profile: {
+              create: {
+                city: input.city,
+                languages: input.languages,
+                defaultMood: input.mood,
+                blurFirst: true,
+                captions: true,
+              },
+            },
+          },
+        });
 
     await prisma.userProfile.upsert({
       where: { userId: user.id },

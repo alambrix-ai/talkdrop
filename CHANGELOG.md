@@ -2,6 +2,18 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.3.2 — 2026-10-25
+
+### Security hardening (Critical / High / Medium)
+- Webhook shared secret (`INTERNAL_WEBHOOK_SECRET`) for LiveKit + billing webhooks
+- Socket.IO participant checks on all session-scoped events; ban/suspend on handshake
+- `authenticateAdmin` on admin routes; OTP `safeEqual`; phone hash + AES-GCM at rest
+- Access JWT memory-only (no `localStorage`); refresh cookie Origin check + Strict/Secure in prod
+- Helmet CSP, stricter rate limits, upload MIME allowlists, SMS/PII log redaction
+- Privacy delete wipes OTPs/devices; production secret validation; argon2 helpers
+- Docs: `docs/SECURITY_AUDIT.md`, README Security (SFU ≠ classic E2EE residual risk)
+- Billing remains mock
+
 ## 0.3.1 — 2026-10-25
 
 ### Match filters (country / gender / language)

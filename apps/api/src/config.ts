@@ -1,13 +1,26 @@
 import { z } from 'zod';
 
+const WEAK_SECRETS = new Set([
+  'change-me-access-secret-min-32-chars',
+  'change-me-refresh-secret-min-32-chars',
+  'change-me-trust-secret-min-32-chars',
+  'secret',
+  'devkey',
+  'minio123',
+  'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+]);
+
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().default('redis://localhost:6379'),
-  JWT_ACCESS_SECRET: z.string().min(16),
-  JWT_REFRESH_SECRET: z.string().min(16),
-  TRUST_TOKEN_SECRET: z.string().min(16),
-  FIELD_ENCRYPTION_KEY: z.string().min(16),
+  JWT_ACCESS_SECRET: z.string().min(32),
+  JWT_REFRESH_SECRET: z.string().min(32),
+  TRUST_TOKEN_SECRET: z.string().min(32),
+  /** Base64-encoded ≥32-byte key for evidence + phone field encryption */
+  FIELD_ENCRYPTION_KEY: z.string().min(32),
+  /** Shared secret for LiveKit + billing internal webhooks (header x-talkdrop-webhook-secret) */
+  INTERNAL_WEBHOOK_SECRET: z.string().min(16).optional(),
   LIVEKIT_URL: z.string().default('ws://localhost:7880'),
   LIVEKIT_API_KEY: z.string().default('devkey'),
   LIVEKIT_API_SECRET: z.string().default('secret'),
@@ -48,6 +61,39 @@ export type AppConfig = z.infer<typeof envSchema>;
 
 let cached: AppConfig | null = null;
 
+function assertProductionSecrets(config: AppConfig): void {
+  if (config.NODE_ENV !== 'production') return;
+
+  const checks: Array<[string, string | undefined]> = [
+    ['JWT_ACCESS_SECRET', config.JWT_ACCESS_SECRET],
+    ['JWT_REFRESH_SECRET', config.JWT_REFRESH_SECRET],
+    ['TRUST_TOKEN_SECRET', config.TRUST_TOKEN_SECRET],
+    ['FIELD_ENCRYPTION_KEY', config.FIELD_ENCRYPTION_KEY],
+    ['LIVEKIT_API_SECRET', config.LIVEKIT_API_SECRET],
+    ['INTERNAL_WEBHOOK_SECRET', config.INTERNAL_WEBHOOK_SECRET],
+  ];
+
+  for (const [name, value] of checks) {
+    if (!value || value.length < 16 || WEAK_SECRETS.has(value) || value.startsWith('change-me')) {
+      throw new Error(
+        `Production refuses weak or missing secret: ${name}. Use a secret manager; see README Security.`,
+      );
+    }
+  }
+
+  // FIELD_ENCRYPTION_KEY must decode to ≥32 bytes
+  try {
+    const key = Buffer.from(config.FIELD_ENCRYPTION_KEY, 'base64');
+    if (key.length < 32) {
+      throw new Error('FIELD_ENCRYPTION_KEY must be base64 for ≥32 bytes');
+    }
+  } catch (err) {
+    throw new Error(
+      `Invalid FIELD_ENCRYPTION_KEY: ${err instanceof Error ? err.message : 'decode failed'}`,
+    );
+  }
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached && env === process.env) return cached;
   const parsed = envSchema.safeParse(env);
@@ -55,6 +101,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     const msg = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Invalid environment: ${msg}`);
   }
+  assertProductionSecrets(parsed.data);
   if (env === process.env) cached = parsed.data;
   return parsed.data;
 }

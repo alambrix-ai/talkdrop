@@ -1,4 +1,5 @@
 import type { SmsProvider } from '@talkdrop/shared';
+import { maskPhone } from '../lib/crypto.js';
 
 export class MockSmsProvider implements SmsProvider {
   public lastSent: Array<{ phone: string; code: string }> = [];
@@ -6,7 +7,8 @@ export class MockSmsProvider implements SmsProvider {
   async sendOtp(phoneE164: string, code: string): Promise<void> {
     this.lastSent.push({ phone: phoneE164, code });
     if (process.env.NODE_ENV !== 'test') {
-      console.info(`[mock-sms] OTP for ${phoneE164}: ${code}`);
+      // Never log OTP codes or full phone numbers
+      console.info(`[mock-sms] OTP queued for ${maskPhone(phoneE164)}`);
     }
   }
 }

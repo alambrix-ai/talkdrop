@@ -46,25 +46,39 @@ export class PrivacyService {
   }
 
   async deleteData(userId: string) {
-    // Soft-delete style: anonymise PII, revoke tokens, keep enforcement audit integrity
-    await prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    await prisma.userInterest.deleteMany({ where: { userId } });
-    await prisma.userProfile.deleteMany({ where: { userId } });
-    await prisma.message.deleteMany({ where: { senderId: userId } });
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        displayName: 'Deleted user',
-        phoneE164: null,
-        email: null,
-        avatarUrl: null,
-        status: 'banned',
-        ageVerified: false,
-      },
-    });
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new AppError('not_found', 'User not found', 404);
+
+    const otpOr = [
+      ...(user.phoneHash ? [{ phoneHash: user.phoneHash }] : []),
+      ...(user.phoneE164 ? [{ phoneE164: user.phoneE164 }] : []),
+    ];
+
+    await prisma.$transaction([
+      prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+      prisma.device.deleteMany({ where: { userId } }),
+      ...(otpOr.length
+        ? [prisma.authOtp.deleteMany({ where: { OR: otpOr } })]
+        : []),
+      prisma.userInterest.deleteMany({ where: { userId } }),
+      prisma.userProfile.deleteMany({ where: { userId } }),
+      prisma.message.deleteMany({ where: { senderId: userId } }),
+      prisma.user.update({
+        where: { id: userId },
+        data: {
+          displayName: 'Deleted user',
+          phoneE164: null,
+          phoneHash: null,
+          email: null,
+          avatarUrl: null,
+          status: 'banned',
+          ageVerified: false,
+        },
+      }),
+    ]);
     return { deleted: true };
   }
 }
