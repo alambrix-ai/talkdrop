@@ -6,6 +6,7 @@ import { prisma } from './lib/prisma.js';
 import { getRedis } from './lib/redis.js';
 import { startMatcherLoop } from './modules/matching/run-cycle.js';
 import { initOtel } from './lib/metrics.js';
+import { createLiveKitProvider } from './providers/livekit.js';
 
 function loadEnvFile() {
   const candidates = [
@@ -36,12 +37,20 @@ const { app } = await buildApp(config);
 await app.listen({ port: config.API_PORT, host: '0.0.0.0' });
 app.log.info(`Talkdrop API listening on ${config.API_PORT}`);
 
+const livekit = await createLiveKitProvider({
+  mock: config.LIVEKIT_MOCK,
+  url: config.LIVEKIT_URL,
+  apiKey: config.LIVEKIT_API_KEY,
+  apiSecret: config.LIVEKIT_API_SECRET,
+});
+
 // In-process matcher so matching works even if the worker process is down (Lua claim stays atomic).
 const stopMatcher = startMatcherLoop(
   {
     redis: getRedis(),
     prisma,
     livekitUrl: config.LIVEKIT_URL,
+    livekit,
     widenAfterMs: config.MATCH_WIDEN_AFTER_MS,
   },
   config.MATCH_INTERVAL_MS,

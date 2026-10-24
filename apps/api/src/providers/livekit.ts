@@ -1,5 +1,5 @@
 import type { LiveKitProvider } from '@talkdrop/shared';
-import { SignJWT } from 'jose';
+import { ensureLiveKitRoom, mintLiveKitToken } from '../lib/livekit-tokens.js';
 
 export class MockLiveKitProvider implements LiveKitProvider {
   public rooms = new Set<string>();
@@ -20,17 +20,73 @@ export class MockLiveKitProvider implements LiveKitProvider {
     name: string;
     ttlSec?: number;
   }): Promise<{ url: string; token: string }> {
-    const secret = new TextEncoder().encode('mock-livekit-secret');
-    const token = await new SignJWT({
-      video: { roomJoin: true, room: input.roomName, canPublish: true, canSubscribe: true },
+    return mintLiveKitToken({
+      mock: true,
+      url: this.url,
+      apiKey: 'devkey',
+      apiSecret: 'secret',
+      roomName: input.roomName,
+      identity: input.identity,
       name: input.name,
-    })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setSubject(input.identity)
-      .setIssuedAt()
-      .setExpirationTime(`${input.ttlSec ?? 600}s`)
-      .sign(secret);
-    return { url: this.url, token };
+      ttlSec: input.ttlSec,
+    });
+  }
+}
+
+export class RealLiveKitProvider implements LiveKitProvider {
+  constructor(
+    private url: string,
+    private apiKey: string,
+    private apiSecret: string,
+  ) {}
+
+  async createRoom(roomName: string): Promise<void> {
+    try {
+      await ensureLiveKitRoom({
+        mock: false,
+        url: this.url,
+        apiKey: this.apiKey,
+        apiSecret: this.apiSecret,
+        roomName,
+      });
+    } catch (err) {
+      console.warn(
+        `[livekit] createRoom(${roomName}) failed — is Compose LiveKit up?`,
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  async deleteRoom(roomName: string): Promise<void> {
+    try {
+      const { RoomServiceClient } = await import('livekit-server-sdk');
+      const rooms = new RoomServiceClient(
+        this.url.replace(/^ws/, 'http'),
+        this.apiKey,
+        this.apiSecret,
+      );
+      await rooms.deleteRoom(roomName);
+    } catch {
+      /* ignore missing rooms */
+    }
+  }
+
+  async createToken(input: {
+    roomName: string;
+    identity: string;
+    name: string;
+    ttlSec?: number;
+  }): Promise<{ url: string; token: string }> {
+    return mintLiveKitToken({
+      mock: false,
+      url: this.url,
+      apiKey: this.apiKey,
+      apiSecret: this.apiSecret,
+      roomName: input.roomName,
+      identity: input.identity,
+      name: input.name,
+      ttlSec: input.ttlSec,
+    });
   }
 }
 
@@ -40,37 +96,21 @@ export async function createLiveKitProvider(opts: {
   apiKey: string;
   apiSecret: string;
 }): Promise<LiveKitProvider> {
-  if (opts.mock) return new MockLiveKitProvider(opts.url);
+  if (opts.mock) {
+    console.info('[livekit] using MockLiveKitProvider (LIVEKIT_MOCK=true)');
+    return new MockLiveKitProvider(opts.url);
+  }
+
   try {
-    const { AccessToken, RoomServiceClient } = await import('livekit-server-sdk');
-    const rooms = new RoomServiceClient(opts.url.replace(/^ws/, 'http'), opts.apiKey, opts.apiSecret);
-    return {
-      async createRoom(roomName: string) {
-        await rooms.createRoom({ name: roomName, emptyTimeout: 60, maxParticipants: 4 });
-      },
-      async deleteRoom(roomName: string) {
-        try {
-          await rooms.deleteRoom(roomName);
-        } catch {
-          /* ignore */
-        }
-      },
-      async createToken(input) {
-        const at = new AccessToken(opts.apiKey, opts.apiSecret, {
-          identity: input.identity,
-          name: input.name,
-          ttl: input.ttlSec ?? 600,
-        });
-        at.addGrant({
-          roomJoin: true,
-          room: input.roomName,
-          canPublish: true,
-          canSubscribe: true,
-        });
-        return { url: opts.url, token: await at.toJwt() };
-      },
-    };
-  } catch {
+    // Soft probe: construct client; actual createRoom validates connectivity later.
+    await import('livekit-server-sdk');
+    console.info(`[livekit] using RealLiveKitProvider → ${opts.url}`);
+    return new RealLiveKitProvider(opts.url, opts.apiKey, opts.apiSecret);
+  } catch (err) {
+    console.warn(
+      '[livekit] livekit-server-sdk unavailable, falling back to mock:',
+      err instanceof Error ? err.message : err,
+    );
     return new MockLiveKitProvider(opts.url);
   }
 }

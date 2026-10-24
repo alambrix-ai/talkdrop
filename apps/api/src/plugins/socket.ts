@@ -4,6 +4,8 @@ import {
   ClientEvents,
   ServerEvents,
   chatSendSchema,
+  codrawStrokeSchema,
+  cowatchStateSchema,
   queueJoinSchema,
   type MatchFound,
 } from '@talkdrop/shared';
@@ -202,13 +204,40 @@ export function createSocketHub(
       ClientEvents.CAPTIONS_TOGGLE,
       async (payload: { sessionId: string; enabled: boolean }, ack) => {
         if (payload.enabled) {
-          const line = services.captions.nextLine(Date.now());
+          const line = await services.captions.translateAsync(
+            services.captions.nextLine(Date.now()),
+            null,
+          );
           nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.CAPTION_LINE, {
             sessionId: payload.sessionId,
             ...line,
           });
         }
         ack?.({ ok: true });
+      },
+    );
+
+    socket.on(
+      ClientEvents.CAPTION_CLIENT_LINE,
+      async (
+        payload: { sessionId: string; text: string; speakerLocale?: string; translateTo?: string },
+        ack,
+      ) => {
+        try {
+          const line = await services.captions.translateAsync(
+            await services.captions.fromClientText(
+              payload.text,
+              payload.speakerLocale ?? 'en',
+              payload.translateTo,
+            ),
+            payload.translateTo,
+          );
+          const body = { sessionId: payload.sessionId, userId, ...line };
+          nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.CAPTION_LINE, body);
+          ack?.({ ok: true, ...body });
+        } catch (err) {
+          ack?.({ ok: false, error: err instanceof Error ? err.message : 'caption_failed' });
+        }
       },
     );
 
@@ -227,15 +256,66 @@ export function createSocketHub(
     socket.on(
       ClientEvents.EFFECT_SET,
       async (payload: { sessionId: string; effect: 'none' | 'warm' | 'mono' | 'soft' }, ack) => {
+        // Server hook for effect preference (audit / Plus HD future); broadcast to peer.
         const body = {
           sessionId: payload.sessionId,
           effect: payload.effect,
           userId,
         };
+        await getRedis().set(
+          `effect:${payload.sessionId}:${userId}`,
+          payload.effect,
+          'EX',
+          3600,
+        );
         nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.EFFECT_SET, body);
         ack?.({ ok: true, ...body });
       },
     );
+
+    socket.on(ClientEvents.CODRAW_STROKE, async (payload, ack) => {
+      try {
+        const stroke = codrawStrokeSchema.parse(payload);
+        void socket.join(`session:${stroke.sessionId}`);
+        nsp.to(`session:${stroke.sessionId}`).emit(ServerEvents.CODRAW_STROKE, {
+          ...stroke,
+          userId,
+        });
+        ack?.({ ok: true });
+      } catch (err) {
+        ack?.({ ok: false, error: err instanceof Error ? err.message : 'codraw_failed' });
+      }
+    });
+
+    socket.on(
+      ClientEvents.CODRAW_CLEAR,
+      async (payload: { sessionId: string }, ack) => {
+        nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.CODRAW_CLEAR, {
+          sessionId: payload.sessionId,
+          userId,
+        });
+        ack?.({ ok: true });
+      },
+    );
+
+    socket.on(ClientEvents.COWATCH_STATE, async (payload, ack) => {
+      try {
+        const state = cowatchStateSchema.parse(payload);
+        const clip = services.activities.resolveCoWatchVideo(state.videoId);
+        const body = {
+          ...state,
+          url: clip.url,
+          title: clip.title,
+          userId,
+          updatedAt: Date.now(),
+        };
+        void socket.join(`session:${state.sessionId}`);
+        nsp.to(`session:${state.sessionId}`).emit(ServerEvents.COWATCH_STATE, body);
+        ack?.({ ok: true, ...body });
+      } catch (err) {
+        ack?.({ ok: false, error: err instanceof Error ? err.message : 'cowatch_failed' });
+      }
+    });
   });
 
   return {

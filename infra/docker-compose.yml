@@ -51,6 +51,8 @@ services:
       exit 0;
       "
 
+  # Real SFU for local `pnpm dev` (LIVEKIT_MOCK=false by default in .env.example).
+  # Keys must match LIVEKIT_API_KEY / LIVEKIT_API_SECRET (devkey / secret).
   livekit:
     image: livekit/livekit-server:v1.8.0
     command: --config /etc/livekit.yaml --dev
@@ -60,6 +62,12 @@ services:
       - '7880:7880'
       - '7881:7881'
       - '7882:7882/udp'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '-', 'http://127.0.0.1:7880']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   mailhog:
     image: mailhog/mailhog:v1.0.1

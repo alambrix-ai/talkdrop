@@ -17,14 +17,20 @@ export function VideoTile({
   className = '',
   style,
 }: VideoTileProps) {
+  const extraFilter = typeof style?.filter === 'string' ? style.filter : undefined;
+  const filter = [blurred ? 'blur(18px)' : null, extraFilter && extraFilter !== 'none' ? extraFilter : null]
+    .filter(Boolean)
+    .join(' ') || undefined;
+  const { filter: _f, ...restStyle } = style ?? {};
+  void _f;
   return (
     <div
       className={['vid', placeholder && !children ? 'placeholder' : '', className]
         .filter(Boolean)
         .join(' ')}
       style={{
-        ...style,
-        filter: blurred ? 'blur(18px)' : undefined,
+        ...restStyle,
+        filter,
         transition: 'filter 600ms ease-out',
       }}
     >

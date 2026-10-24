@@ -1,14 +1,15 @@
 /**
- * Server-side LiveKit moderation tap (Phase 6).
+ * Server-side LiveKit moderation tap.
  *
- * In production this joins each LiveKit room as a hidden subscriber and samples
- * remote video/audio tracks. In mock/dev mode we poll live sessions and run the
- * ModerationProvider against synthetic frame buffers so a malicious client cannot
- * be the only source of samples — the server always runs its own loop.
+ * Joins each LiveKit room as a hidden subscriber (when LIVEKIT_MOCK=false) and
+ * samples remote video frames via `@livekit/rtc-node` when available. Falls back
+ * to room-meta / synthetic buffers otherwise. MOD_FORCE_FLAG still forces a cut.
  */
 import type { PrismaClient } from '@prisma/client';
 import type Redis from 'ioredis';
 import type { ModerationProvider } from '@talkdrop/shared';
+import type { FrameSampler } from './frame-sampler.js';
+import type { WorkerLiveKit } from './livekit.js';
 
 const CUT_CHANNEL = 'talkdrop:cut';
 const ACTIVE_TAPS = new Set<string>();
@@ -18,7 +19,8 @@ export interface ModerationTapDeps {
   redis: Redis;
   moderation: ModerationProvider;
   nudityCut: number;
-  mock: boolean;
+  livekit: WorkerLiveKit;
+  sampler: FrameSampler;
   /** Inject a forced FLAG frame for a session (tests). */
   forceFlagSessionIds?: Set<string>;
 }
@@ -27,13 +29,33 @@ export async function sampleSession(
   deps: ModerationTapDeps,
   sessionId: string,
   userId: string,
-): Promise<{ cut: boolean; score: number; label: string }> {
-  const payload =
-    deps.forceFlagSessionIds?.has(sessionId) || process.env.MOD_FORCE_FLAG === '1'
-      ? Buffer.from('FLAG-server-tap')
-      : Buffer.from(`server-tap:${sessionId}:${Date.now()}`);
+  roomName?: string | null,
+): Promise<{ cut: boolean; score: number; label: string; source: string }> {
+  let buffer: Buffer;
+  let source = 'synthetic';
 
-  const result = await deps.moderation.scanImage(payload);
+  if (deps.forceFlagSessionIds?.has(sessionId) || process.env.MOD_FORCE_FLAG === '1') {
+    buffer = Buffer.from('FLAG-server-tap');
+    source = 'forced-flag';
+  } else {
+    const sample = await deps.sampler.sampleRoom(roomName ?? sessionId, sessionId);
+    buffer = sample.buffer;
+    source = sample.source;
+  }
+
+  // Mark hidden-subscriber join intent for observability
+  await deps.redis.set(
+    `modtap:${sessionId}`,
+    JSON.stringify({
+      joinedAt: Date.now(),
+      mode: deps.livekit.mock ? 'mock-hidden-subscriber' : 'hidden-subscriber',
+      source,
+    }),
+    'EX',
+    120,
+  );
+
+  const result = await deps.moderation.scanImage(buffer);
   const top = result.labels[0];
   const score = top?.score ?? 0;
   const label = top?.name ?? 'unknown';
@@ -55,7 +77,7 @@ export async function sampleSession(
       sessionId,
       userId,
       kind: 'frame',
-      label: `server:${label}`,
+      label: `server:${source}:${label}`,
       score,
       actionTaken,
     },
@@ -91,7 +113,7 @@ export async function sampleSession(
     }
   }
 
-  return { cut, score, label };
+  return { cut, score, label, source };
 }
 
 /** Discover live/connecting sessions and sample one participant each. */
@@ -110,16 +132,7 @@ export async function runModerationTapCycle(deps: ModerationTapDeps): Promise<nu
 
     ACTIVE_TAPS.add(session.id);
     try {
-      // Mock "hidden subscriber" join marker
-      if (deps.mock) {
-        await deps.redis.set(
-          `modtap:${session.id}`,
-          JSON.stringify({ joinedAt: Date.now(), mode: 'mock-hidden-subscriber' }),
-          'EX',
-          120,
-        );
-      }
-      await sampleSession(deps, session.id, participant.userId);
+      await sampleSession(deps, session.id, participant.userId, session.livekitRoom);
       sampled += 1;
     } finally {
       ACTIVE_TAPS.delete(session.id);
@@ -133,11 +146,16 @@ export function startModerationTap(
   intervalMs = 2000,
   log: (msg: string) => void = console.info,
 ): () => void {
-  log(`[mod-tap] starting server-side moderation tap (mock=${deps.mock})`);
+  log(
+    `[mod-tap] starting server-side moderation tap (mock=${deps.livekit.mock})`,
+  );
   const timer = setInterval(() => {
     void runModerationTapCycle(deps).catch((err) =>
       log(`[mod-tap] error: ${err instanceof Error ? err.message : String(err)}`),
     );
   }, intervalMs);
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    void deps.sampler.disconnectAll();
+  };
 }

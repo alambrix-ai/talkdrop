@@ -48,3 +48,23 @@ export interface LiveKitProvider {
     ttlSec?: number;
   }): Promise<{ url: string; token: string }>;
 }
+
+export interface CaptionLine {
+  speakerLocale: string;
+  text: string;
+  original: string;
+  translatedTo: string | null;
+  provider: string;
+  partial?: boolean;
+}
+
+export interface SttProvider {
+  /** Transcribe an audio chunk (webm/wav/ogg). Empty audio → local streaming fallback. */
+  transcribe(audio: Buffer, locale?: string): Promise<{ text: string; locale: string; provider: string }>;
+  /** Dev/local stream of progressive caption lines when no audio vendor is configured. */
+  nextStreamingLine?(tick: number): CaptionLine;
+}
+
+export interface TranslationProvider {
+  translate(text: string, from: string, to: string): Promise<string>;
+}

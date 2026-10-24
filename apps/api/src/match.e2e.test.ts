@@ -7,6 +7,7 @@ import { buildApp } from './app.js';
 import { prisma } from './lib/prisma.js';
 import { getRedis } from './lib/redis.js';
 import { runMatchCycle } from './modules/matching/run-cycle.js';
+import { MockLiveKitProvider } from './providers/livekit.js';
 
 async function signup(app: FastifyInstance, phone: string, name: string) {
   const req = await app.inject({
@@ -128,6 +129,7 @@ describe('E2E matching', () => {
       redis: getRedis(),
       prisma,
       livekitUrl: 'ws://localhost:7880',
+      livekit: new MockLiveKitProvider('ws://localhost:7880'),
       widenAfterMs: 8000,
     });
 
