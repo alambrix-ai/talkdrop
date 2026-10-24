@@ -14,6 +14,8 @@ function ticket(partial: Partial<MatchTicket> & { userId: string }): MatchTicket
     mood: 'chill',
     languages: ['en'],
     region: 'global',
+    country: 'IN',
+    gender: 'woman',
     trustTier: 'bronze',
     tenantId: null,
     blockedIds: [],
@@ -48,6 +50,59 @@ describe('hardConstraintsOk', () => {
     const a = ticket({ userId: '1' });
     const b = ticket({ userId: '2', interests: ['jazz', 'travel'] });
     expect(hardConstraintsOk(a, b)).toBe(true);
+  });
+
+  it('enforces country filters when set (empty = any)', () => {
+    const a = ticket({
+      userId: '1',
+      country: 'IN',
+      filters: { countries: ['JP'] },
+    });
+    const b = ticket({ userId: '2', country: 'IN', gender: 'man' });
+    expect(hardConstraintsOk(a, b)).toBe(false);
+    expect(
+      hardConstraintsOk(a, ticket({ userId: '3', country: 'JP', gender: 'man', languages: ['en'] })),
+    ).toBe(true);
+    expect(
+      hardConstraintsOk(
+        ticket({ userId: '4', filters: { countries: [] } }),
+        ticket({ userId: '5', country: 'US' }),
+      ),
+    ).toBe(true);
+  });
+
+  it('enforces gender filters both ways', () => {
+    const a = ticket({
+      userId: '1',
+      gender: 'woman',
+      filters: { genders: ['man'] },
+    });
+    const b = ticket({
+      userId: '2',
+      gender: 'woman',
+      filters: { genders: ['woman'] },
+    });
+    expect(hardConstraintsOk(a, b)).toBe(false);
+    const c = ticket({
+      userId: '3',
+      gender: 'man',
+      filters: { genders: ['woman'] },
+      languages: ['en'],
+    });
+    expect(hardConstraintsOk(a, c)).toBe(true);
+  });
+
+  it('enforces language preference filters', () => {
+    const a = ticket({
+      userId: '1',
+      languages: ['en', 'hi'],
+      filters: { languages: ['ja'] },
+    });
+    const b = ticket({ userId: '2', languages: ['en', 'hi'] });
+    expect(hardConstraintsOk(a, b)).toBe(false);
+    expect(
+      hardConstraintsOk(a, ticket({ userId: '3', languages: ['en', 'ja'], gender: 'man' })),
+    ).toBe(true);
   });
 });
 

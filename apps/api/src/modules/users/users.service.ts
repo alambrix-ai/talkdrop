@@ -1,7 +1,33 @@
-import { MIN_INTERESTS, MAX_INTERESTS, type PatchMe, type PutInterests } from '@talkdrop/shared';
+import {
+  MIN_INTERESTS,
+  MAX_INTERESTS,
+  Gender,
+  type MatchFiltersInput,
+  type PatchMe,
+  type PutInterests,
+} from '@talkdrop/shared';
 import { AppError } from '../../lib/errors.js';
 import { prisma } from '../../lib/prisma.js';
 import { maskPhone } from '../../lib/crypto.js';
+
+function profileFilters(profile: {
+  filterCountries: string[];
+  filterGenders: string[];
+  filterLanguages: string[];
+  filterRegions: string[];
+} | null): MatchFiltersInput {
+  if (!profile) return {};
+  const genders = profile.filterGenders.flatMap((g) => {
+    const parsed = Gender.safeParse(g);
+    return parsed.success ? [parsed.data] : [];
+  });
+  return {
+    ...(profile.filterCountries.length ? { countries: profile.filterCountries } : {}),
+    ...(genders.length ? { genders } : {}),
+    ...(profile.filterLanguages.length ? { languages: profile.filterLanguages } : {}),
+    ...(profile.filterRegions.length ? { regions: profile.filterRegions } : {}),
+  };
+}
 
 export class UsersService {
   async getMe(userId: string) {
@@ -20,6 +46,7 @@ export class UsersService {
       slug: ui.interest.slug,
       label: ui.interest.label,
     }));
+    const genderParsed = Gender.safeParse(user.profile?.gender);
 
     return {
       id: user.id,
@@ -37,6 +64,7 @@ export class UsersService {
         bio: user.profile?.bio ?? null,
         city: user.profile?.city ?? null,
         languages: user.profile?.languages ?? [],
+        gender: genderParsed.success ? genderParsed.data : null,
         defaultMood: user.profile?.defaultMood ?? null,
         blurFirst: user.profile?.blurFirst ?? true,
         avatarFirst: user.profile?.avatarFirst ?? false,
@@ -44,6 +72,7 @@ export class UsersService {
         translateTo: user.profile?.translateTo ?? null,
         locale: user.profile?.locale ?? 'en',
       },
+      matchFilters: profileFilters(user.profile),
       interests,
       onboardingComplete:
         user.ageVerified &&
@@ -56,7 +85,7 @@ export class UsersService {
   }
 
   async patchMe(userId: string, input: PatchMe) {
-    const { displayName, region, country, timezone, ...profileFields } = input;
+    const { displayName, region, country, timezone, gender, ...profileFields } = input;
     await prisma.$transaction([
       prisma.user.update({
         where: { id: userId },
@@ -74,6 +103,7 @@ export class UsersService {
           bio: profileFields.bio,
           city: profileFields.city,
           languages: profileFields.languages ?? [],
+          gender: gender ?? null,
           defaultMood: profileFields.defaultMood,
           blurFirst: profileFields.blurFirst ?? true,
           avatarFirst: profileFields.avatarFirst ?? false,
@@ -87,6 +117,7 @@ export class UsersService {
           ...(profileFields.languages !== undefined
             ? { languages: profileFields.languages }
             : {}),
+          ...(gender !== undefined ? { gender } : {}),
           ...(profileFields.defaultMood !== undefined
             ? { defaultMood: profileFields.defaultMood }
             : {}),
@@ -104,6 +135,30 @@ export class UsersService {
         },
       }),
     ]);
+    return this.getMe(userId);
+  }
+
+  async putMatchFilters(userId: string, filters: MatchFiltersInput) {
+    const countries = filters.countries ?? [];
+    const genders = filters.genders ?? [];
+    const languages = filters.languages ?? [];
+    const regions = filters.regions ?? [];
+    await prisma.userProfile.upsert({
+      where: { userId },
+      create: {
+        userId,
+        filterCountries: countries,
+        filterGenders: genders,
+        filterLanguages: languages,
+        filterRegions: regions,
+      },
+      update: {
+        filterCountries: countries,
+        filterGenders: genders,
+        filterLanguages: languages,
+        filterRegions: regions,
+      },
+    });
     return this.getMe(userId);
   }
 

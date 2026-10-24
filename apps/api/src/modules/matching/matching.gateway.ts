@@ -1,10 +1,42 @@
-import type { MatchTicket, QueueJoin } from '@talkdrop/shared';
+import type { Gender, MatchFilters, MatchTicket, QueueJoin } from '@talkdrop/shared';
+import { Gender as GenderSchema } from '@talkdrop/shared';
 import { prisma } from '../../lib/prisma.js';
 import { getRedis } from '../../lib/redis.js';
 
 const TICKET_PREFIX = 'ticket:';
 const POOL_KEY = 'pool:global:all';
 const HEARTBEAT_PREFIX = 'hb:';
+
+function hasActiveFilters(filters?: MatchFilters): boolean {
+  if (!filters) return false;
+  return Boolean(
+    filters.countries?.length ||
+      filters.genders?.length ||
+      filters.languages?.length ||
+      filters.regions?.length,
+  );
+}
+
+function fromProfile(profile: {
+  filterCountries: string[];
+  filterGenders: string[];
+  filterLanguages: string[];
+  filterRegions: string[];
+  gender: string | null;
+} | null): { filters: MatchFilters; gender: Gender | '' } {
+  const genderParsed = GenderSchema.safeParse(profile?.gender);
+  const filters: MatchFilters = {
+    ...(profile?.filterCountries.length ? { countries: profile.filterCountries } : {}),
+    ...(profile?.filterGenders.length
+      ? {
+          genders: profile.filterGenders.filter((g): g is Gender => GenderSchema.safeParse(g).success),
+        }
+      : {}),
+    ...(profile?.filterLanguages.length ? { languages: profile.filterLanguages } : {}),
+    ...(profile?.filterRegions.length ? { regions: profile.filterRegions } : {}),
+  };
+  return { filters, gender: genderParsed.success ? genderParsed.data : '' };
+}
 
 export class MatchingGateway {
   async join(userId: string, prefs: QueueJoin): Promise<{ estimatedWaitMs: number }> {
@@ -35,17 +67,17 @@ export class MatchingGateway {
       .map((m) => (m.userA === userId ? m.userB : m.userA))
       .filter((x): x is string => Boolean(x));
 
-    // Plus match filters: client prefs OR saved filters (Premium only)
-    let filters = prefs.filters;
+    const fromDb = fromProfile(user.profile);
+    // Plus match filters (SPEC): Premium gate — empty = any.
+    let filters: MatchFilters | undefined = prefs.filters;
     if (user.plan === 'plus') {
-      const redis = getRedis();
-      const saved = await redis.get(`filters:${userId}`);
-      if (saved) {
-        const parsed = JSON.parse(saved) as { regions?: string[]; languages?: string[] };
-        filters = { ...parsed, ...filters };
-      }
-    } else if (filters?.regions?.length || filters?.languages?.length) {
-      throw new Error('plus_required');
+      filters = { ...fromDb.filters, ...filters };
+    } else if (hasActiveFilters(filters) || hasActiveFilters(fromDb.filters)) {
+      // Free users cannot apply preference filters; ignore saved prefs on ticket.
+      if (hasActiveFilters(filters)) throw new Error('plus_required');
+      filters = undefined;
+    } else {
+      filters = undefined;
     }
 
     const ticket: MatchTicket = {
@@ -54,6 +86,8 @@ export class MatchingGateway {
       mood: prefs.mood,
       languages: prefs.languages,
       region: prefs.region ?? user.region ?? 'global',
+      country: (user.country ?? '').toUpperCase(),
+      gender: fromDb.gender,
       trustTier: user.trustTier,
       tenantId: user.tenantId,
       blockedIds: blockedIds.slice(0, 500),

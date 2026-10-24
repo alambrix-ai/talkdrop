@@ -44,6 +44,32 @@ export const LANGUAGES = [
   { code: 'ar', label: 'Arabic' },
 ] as const;
 
+/** ISO-ish country codes used for profile + Plus match filters. */
+export const COUNTRIES = [
+  { code: 'IN', label: 'India' },
+  { code: 'JP', label: 'Japan' },
+  { code: 'US', label: 'United States' },
+  { code: 'GB', label: 'United Kingdom' },
+  { code: 'DE', label: 'Germany' },
+  { code: 'FR', label: 'France' },
+  { code: 'ES', label: 'Spain' },
+  { code: 'BR', label: 'Brazil' },
+  { code: 'KR', label: 'South Korea' },
+  { code: 'AU', label: 'Australia' },
+  { code: 'CA', label: 'Canada' },
+  { code: 'SG', label: 'Singapore' },
+  { code: 'AE', label: 'United Arab Emirates' },
+  { code: 'MX', label: 'Mexico' },
+  { code: 'NG', label: 'Nigeria' },
+] as const;
+
+export const GENDERS = [
+  { id: 'woman', label: 'Woman' },
+  { id: 'man', label: 'Man' },
+  { id: 'nonbinary', label: 'Non-binary' },
+  { id: 'prefer_not', label: 'Prefer not to say' },
+] as const;
+
 export const MOODS = [
   { id: 'chill', label: 'Chill', description: 'Easy conversation, no pressure' },
   { id: 'curious', label: 'Curious', description: 'Ask questions, learn something' },

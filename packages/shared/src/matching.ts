@@ -1,4 +1,16 @@
-import type { Mood, TrustTier } from './enums.js';
+import type { Gender, Mood, TrustTier } from './enums.js';
+
+/** Plus match preference filters. Empty arrays / undefined = no constraint ("any"). */
+export interface MatchFilters {
+  /** Preferred partner countries (ISO codes). */
+  countries?: string[];
+  /** Preferred partner genders. */
+  genders?: Gender[];
+  /** Preferred languages the partner must speak (at least one). */
+  languages?: string[];
+  /** Legacy region pool filter (kept for older clients). */
+  regions?: string[];
+}
 
 export interface MatchTicket {
   userId: string;
@@ -6,6 +18,10 @@ export interface MatchTicket {
   mood: Mood;
   languages: string[];
   region: string;
+  /** ISO country code for this user (may be empty). */
+  country: string;
+  /** Self gender for this user (may be empty / prefer_not). */
+  gender: Gender | '';
   trustTier: TrustTier;
   tenantId: string | null;
   blockedIds: string[];
@@ -13,10 +29,8 @@ export interface MatchTicket {
   joinedAt: number;
   ageVerified: boolean;
   lastHeartbeat: number;
-  filters?: {
-    regions?: string[];
-    languages?: string[];
-  };
+  /** Plus preference filters — empty means any. */
+  filters?: MatchFilters;
 }
 
 export interface ScoreBreakdown {
@@ -39,6 +53,38 @@ export function jaccard(a: string[], b: string[]): number {
   }
   const union = new Set([...a, ...b]).size;
   return union === 0 ? 0 : intersection / union;
+}
+
+function normalizeList(values?: string[]): string[] {
+  return (values ?? []).map((v) => v.trim()).filter(Boolean);
+}
+
+/** True when `candidate` satisfies `filters` (empty filter = any). */
+export function satisfiesMatchFilters(
+  filters: MatchFilters | undefined,
+  candidate: { country: string; gender: string; languages: string[]; region: string },
+): boolean {
+  if (!filters) return true;
+
+  const countries = normalizeList(filters.countries);
+  if (countries.length) {
+    const code = (candidate.country || '').toUpperCase();
+    if (!code || !countries.map((c) => c.toUpperCase()).includes(code)) return false;
+  }
+
+  const genders = normalizeList(filters.genders as string[] | undefined);
+  if (genders.length) {
+    const g = candidate.gender || '';
+    if (!g || !genders.includes(g)) return false;
+  }
+
+  const langs = normalizeList(filters.languages);
+  if (langs.length && !langs.some((l) => candidate.languages.includes(l))) return false;
+
+  const regions = normalizeList(filters.regions);
+  if (regions.length && !regions.includes(candidate.region)) return false;
+
+  return true;
 }
 
 export function hardConstraintsOk(
@@ -64,12 +110,25 @@ export function hardConstraintsOk(
   const langOverlap = a.languages.some((l) => b.languages.includes(l));
   if (!langOverlap) return false;
 
-  if (a.filters?.regions?.length && !a.filters.regions.includes(b.region)) return false;
-  if (b.filters?.regions?.length && !b.filters.regions.includes(a.region)) return false;
-  if (a.filters?.languages?.length && !a.filters.languages.some((l) => b.languages.includes(l))) {
+  // Plus filters: both sides must satisfy the other's preferences when set.
+  if (
+    !satisfiesMatchFilters(a.filters, {
+      country: b.country,
+      gender: b.gender,
+      languages: b.languages,
+      region: b.region,
+    })
+  ) {
     return false;
   }
-  if (b.filters?.languages?.length && !b.filters.languages.some((l) => a.languages.includes(l))) {
+  if (
+    !satisfiesMatchFilters(b.filters, {
+      country: a.country,
+      gender: a.gender,
+      languages: a.languages,
+      region: a.region,
+    })
+  ) {
     return false;
   }
 
@@ -92,7 +151,6 @@ export function scorePair(
     // mood relaxed
   }
   if (widenLevel < 2 && shared < 1 / Math.max(a.interests.length, b.interests.length, 1)) {
-    // require some overlap before widen 2
     const overlapCount = a.interests.filter((i) => b.interests.includes(i)).length;
     if (overlapCount < 1 && widenLevel < 2) return null;
   }
@@ -102,7 +160,7 @@ export function scorePair(
   const languageScore = Math.min(15, langOverlap * 7.5);
   const waitMs = Math.min(now - a.joinedAt, now - b.joinedAt);
   const waitScore = Math.min(15, (waitMs / 20_000) * 15);
-  const vibeScore = 5; // placeholder until history is wired
+  const vibeScore = 5;
   const diversity = a.recentPartners.length > 10 || b.recentPartners.length > 10 ? -5 : 0;
 
   const total = interestScore + moodScore + languageScore + waitScore + vibeScore + diversity;

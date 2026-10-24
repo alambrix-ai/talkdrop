@@ -7,6 +7,7 @@ import {
   createBlockSchema,
   createReportSchema,
   endSessionSchema,
+  matchFiltersSchema,
   otpRequestSchema,
   otpVerifySchema,
   patchMeSchema,
@@ -448,20 +449,29 @@ export async function registerRoutes(
     return services.privacy.deleteData(req.user!.id);
   });
 
-  // Match filters (Plus)
+  // Match filters (Plus / Premium — SPEC §7.9 / §11). Empty arrays = any.
+  app.get('/api/v1/me/filters', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const me = await services.users.getMe(req.user!.id);
+    return {
+      plan: me.plan,
+      plusRequired: me.plan !== 'plus',
+      filters: me.matchFilters ?? {},
+    };
+  });
+
   app.put('/api/v1/me/filters', { preHandler: [app.authenticateVerified] }, async (req) => {
     const me = await services.users.getMe(req.user!.id);
     services.billing.assertPlus(me.plan);
-    const body = z
-      .object({
-        regions: z.array(z.string()).optional(),
-        languages: z.array(z.string()).optional(),
-      })
-      .parse(req.body);
-    // Persist lightly on profile via region/languages preference JSON in bio meta — use redis for MVP
+    const body = matchFiltersSchema.parse(req.body ?? {});
+    const updated = await services.users.putMatchFilters(req.user!.id, body);
     const { getRedis } = await import('../lib/redis.js');
-    await getRedis().set(`filters:${req.user!.id}`, JSON.stringify(body), 'EX', 86400 * 30);
-    return { ok: true, filters: body };
+    await getRedis().set(
+      `filters:${req.user!.id}`,
+      JSON.stringify(updated.matchFilters ?? {}),
+      'EX',
+      86400 * 30,
+    );
+    return { ok: true, filters: updated.matchFilters ?? {} };
   });
 
   // Admin

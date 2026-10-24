@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { COUNTRIES, GENDERS } from '@talkdrop/shared';
 import { Avatar, Button, Card, Switch, Tag } from '@talkdrop/ui';
 import { api, setAccessToken } from '../../lib/api';
 import { disconnectSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
+import { MatchFiltersPanel } from './MatchFiltersPanel';
 
 export default function ProfilePage() {
   const me = useAppStore((s) => s.me);
@@ -69,7 +71,13 @@ export default function ProfilePage() {
           <div>
             <h1 className="h2">{me.displayName}</h1>
             <p className="mute" style={{ margin: '6px 0 0' }}>
-              {me.profile.city ?? 'Somewhere'} · {me.profile.languages.join(', ')}
+              {me.profile.city ?? 'Somewhere'}
+              {me.country ? ` · ${COUNTRIES.find((c) => c.code === me.country)?.label ?? me.country}` : ''}
+              {' · '}
+              {me.profile.languages.join(', ')}
+              {me.profile.gender
+                ? ` · ${GENDERS.find((g) => g.id === me.profile.gender)?.label ?? me.profile.gender}`
+                : ''}
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               {me.ageVerified ? <Tag variant="mint">Verified 18+</Tag> : null}
@@ -133,7 +141,7 @@ export default function ProfilePage() {
         <Card tone="cream" style={{ padding: 24 }}>
           <h2 className="h3">Talkdrop Plus</h2>
           <p className="mute" style={{ marginTop: 8 }}>
-            399 INR / month · HD video, region & language filters, live translation, priority
+            399 INR / month · country, gender & language match filters, live translation, priority
             matching. Current plan: <strong>{me.plan}</strong>
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
@@ -151,20 +159,8 @@ export default function ProfilePage() {
             >
               {me.plan === 'plus' ? 'Renew (mock)' : 'Upgrade (mock)'}
             </Button>
-            {me.plan === 'plus' ? (
-              <Button
-                variant="ghost"
-                onClick={() =>
-                  void api('/me/filters', {
-                    method: 'PUT',
-                    json: { regions: ['global', 'asia'], languages: ['en', 'hi'] },
-                  }).then(() => setToast('Plus match filters saved'))
-                }
-              >
-                Save Plus filters
-              </Button>
-            ) : null}
           </div>
+          <MatchFiltersPanel me={me} />
         </Card>
 
         <Card style={{ padding: 24 }}>

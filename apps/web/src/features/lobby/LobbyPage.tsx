@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ClientEvents, ServerEvents, type MatchFound } from '@talkdrop/shared';
+import {
+  COUNTRIES,
+  GENDERS,
+  LANGUAGES,
+  ClientEvents,
+  ServerEvents,
+  type MatchFound,
+} from '@talkdrop/shared';
 import { Button, Card, Orb, Tag } from '@talkdrop/ui';
 import { LocalVideo } from '../../components/LocalVideo';
 import { api } from '../../lib/api';
@@ -99,6 +106,46 @@ export default function LobbyPage() {
               {i.label}
             </Tag>
           ))}
+        </div>
+        <div
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}
+          aria-label="Active match filters"
+        >
+          <Tag>
+            {me?.country
+              ? COUNTRIES.find((c) => c.code === me.country)?.label ?? me.country
+              : 'Anywhere'}
+          </Tag>
+          <Tag>
+            {me?.profile.languages
+              .map((code) => LANGUAGES.find((l) => l.code === code)?.label ?? code)
+              .join('/') || 'Any language'}
+          </Tag>
+          <Tag>{me?.profile.defaultMood ?? 'Chill'}</Tag>
+          {me?.plan === 'plus' && me.matchFilters?.countries?.length ? (
+            <Tag variant="mint">
+              Filter:{' '}
+              {me.matchFilters.countries
+                .map((c) => COUNTRIES.find((x) => x.code === c)?.label ?? c)
+                .join(', ')}
+            </Tag>
+          ) : null}
+          {me?.plan === 'plus' && me.matchFilters?.genders?.length ? (
+            <Tag variant="mint">
+              Filter:{' '}
+              {me.matchFilters.genders
+                .map((g) => GENDERS.find((x) => x.id === g)?.label ?? g)
+                .join(', ')}
+            </Tag>
+          ) : null}
+          {me?.plan === 'plus' && me.matchFilters?.languages?.length ? (
+            <Tag variant="mint">
+              Pref lang:{' '}
+              {me.matchFilters.languages
+                .map((code) => LANGUAGES.find((l) => l.code === code)?.label ?? code)
+                .join('/')}
+            </Tag>
+          ) : null}
         </div>
         <Button
           id="start-meeting"

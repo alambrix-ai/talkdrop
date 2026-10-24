@@ -49,3 +49,7 @@ export type AdminRole = z.infer<typeof AdminRole>;
 
 export const Mood = z.enum(['chill', 'curious', 'debate', 'play']);
 export type Mood = z.infer<typeof Mood>;
+
+/** Self-described gender for matching (optional; prefer_not is allowed). */
+export const Gender = z.enum(['woman', 'man', 'nonbinary', 'prefer_not']);
+export type Gender = z.infer<typeof Gender>;
