@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: talkdrop
+          POSTGRES_PASSWORD: talkdrop
+          POSTGRES_DB: talkdrop
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U talkdrop -d talkdrop"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://talkdrop:talkdrop@localhost:5432/talkdrop
+      REDIS_URL: redis://localhost:6379
+      JWT_ACCESS_SECRET: ci-access-secret-min-32-characters
+      JWT_REFRESH_SECRET: ci-refresh-secret-min-32-characters
+      TRUST_TOKEN_SECRET: ci-trust-secret-min-32-characters
+      FIELD_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      LIVEKIT_MOCK: 'true'
+      S3_MOCK: 'true'
+      SMS_PROVIDER: mock
+      AGE_PROVIDER: mock
+      MODERATION_PROVIDER: mock
+      WEB_ORIGIN: http://localhost:5173
+      API_ORIGIN: http://localhost:4000
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm --filter @talkdrop/shared build
+      - run: pnpm --filter @talkdrop/ui build
+      - run: pnpm db:generate
+      - name: Enable extensions
+        run: |
+          PGPASSWORD=talkdrop psql -h localhost -U talkdrop -d talkdrop -c "CREATE EXTENSION IF NOT EXISTS pgcrypto; CREATE EXTENSION IF NOT EXISTS citext; CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+      - run: pnpm db:migrate
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @talkdrop/web build

@@ -1,0 +1,50 @@
+import type { VerificationResult } from './enums.js';
+
+export interface ModerationLabel {
+  name: string;
+  score: number;
+}
+
+export interface ModerationProvider {
+  scanImage(buf: Buffer): Promise<{ labels: ModerationLabel[]; flagged: boolean }>;
+  transcribeAndScore(
+    audio: Buffer,
+    locale?: string,
+  ): Promise<{ text: string; toxicity: number; labels: string[] }>;
+  scoreText(text: string): Promise<{ toxicity: number; labels: string[] }>;
+}
+
+export interface AgeVerificationProvider {
+  verifyFromEstimate(input: {
+    estimatedAge: number;
+    confidence: number;
+    liveness: boolean;
+  }): Promise<VerificationResult>;
+  startDocumentCheck(userId: string): Promise<{ redirectUrl: string }>;
+}
+
+export interface SmsProvider {
+  sendOtp(phoneE164: string, code: string): Promise<void>;
+}
+
+export interface EmailProvider {
+  send(to: string, subject: string, body: string): Promise<void>;
+}
+
+export interface StorageProvider {
+  putObject(key: string, data: Buffer, contentType: string): Promise<void>;
+  getObject(key: string): Promise<Buffer>;
+  deleteObject(key: string): Promise<void>;
+  signedUrl(key: string, expiresSec: number): Promise<string>;
+}
+
+export interface LiveKitProvider {
+  createRoom(roomName: string): Promise<void>;
+  deleteRoom(roomName: string): Promise<void>;
+  createToken(input: {
+    roomName: string;
+    identity: string;
+    name: string;
+    ttlSec?: number;
+  }): Promise<{ url: string; token: string }>;
+}

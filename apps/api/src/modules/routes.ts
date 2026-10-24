@@ -1,0 +1,377 @@
+import type { FastifyInstance } from 'fastify';
+import {
+  adminDecisionSchema,
+  adminPolicySchema,
+  ageVerificationSchema,
+  createAppealSchema,
+  createBlockSchema,
+  createReportSchema,
+  endSessionSchema,
+  otpRequestSchema,
+  otpVerifySchema,
+  patchMeSchema,
+  putInterestsSchema,
+  sendMessageSchema,
+  verificationFallbackCompleteSchema,
+  verificationFallbackStartSchema,
+  vibeCheckSchema,
+} from '@talkdrop/shared';
+import type { AppConfig } from '../config.js';
+import { AppError, toErrorPayload } from '../lib/errors.js';
+import { prisma } from '../lib/prisma.js';
+import { sha256 } from '../lib/crypto.js';
+import type { Providers } from '../providers/index.js';
+import { AuthService } from './auth/auth.service.js';
+import { UsersService } from './users/users.service.js';
+import { VerificationService } from './verification/verification.service.js';
+import { SessionsService } from './sessions/sessions.service.js';
+import { ConnectionsService } from './connections/connections.service.js';
+import { ReportsService } from './reports/reports.service.js';
+import { ModerationService } from './moderation/moderation.service.js';
+import { AdminService } from './admin/admin.service.js';
+import { MatchingGateway } from './matching/matching.gateway.js';
+
+const REFRESH_COOKIE = 'td_refresh';
+
+export interface Services {
+  auth: AuthService;
+  users: UsersService;
+  verification: VerificationService;
+  sessions: SessionsService;
+  connections: ConnectionsService;
+  reports: ReportsService;
+  moderation: ModerationService;
+  admin: AdminService;
+  matching: MatchingGateway;
+}
+
+export function createServices(config: AppConfig, providers: Providers): Services {
+  const sessions = new SessionsService(config, providers);
+  const reports = new ReportsService(config, providers, sessions);
+  return {
+    auth: new AuthService(config, providers),
+    users: new UsersService(),
+    verification: new VerificationService(config, providers),
+    sessions,
+    connections: new ConnectionsService(),
+    reports,
+    moderation: new ModerationService(config, providers, sessions),
+    admin: new AdminService(reports, providers),
+    matching: new MatchingGateway(),
+  };
+}
+
+function parse<T>(schema: { parse: (v: unknown) => T }, body: unknown): T {
+  try {
+    return schema.parse(body);
+  } catch (err) {
+    throw new AppError('validation_error', 'Invalid request', 400, err);
+  }
+}
+
+export async function registerRoutes(
+  app: FastifyInstance,
+  config: AppConfig,
+  services: Services,
+  providers: Providers,
+): Promise<void> {
+  const cookieOpts = {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: config.NODE_ENV === 'production',
+  };
+
+  app.setErrorHandler((err, _req, reply) => {
+    const { statusCode, body } = toErrorPayload(err);
+    reply.status(statusCode).send(body);
+  });
+
+  app.get('/health', async () => ({ ok: true, service: 'talkdrop-api' }));
+
+  // Auth
+  app.post('/api/v1/auth/otp/request', async (req) => {
+    const body = parse(otpRequestSchema, req.body);
+    return services.auth.requestOtp(body.phoneE164);
+  });
+
+  app.post('/api/v1/auth/otp/verify', async (req, reply) => {
+    const body = parse(otpVerifySchema, req.body);
+    const result = await services.auth.verifyOtp({
+      ...body,
+      userAgent: req.headers['user-agent'],
+      ipHash: sha256(req.ip),
+    });
+    reply.setCookie(REFRESH_COOKIE, result.refreshToken, {
+      ...cookieOpts,
+      expires: result.refreshExpiresAt,
+    });
+    return {
+      accessToken: result.accessToken,
+      trustToken: result.trustToken,
+      user: result.user,
+    };
+  });
+
+  app.post('/api/v1/auth/refresh', async (req, reply) => {
+    const raw = req.cookies[REFRESH_COOKIE];
+    if (!raw) throw new AppError('unauthorized', 'No refresh cookie', 401);
+    const result = await services.auth.refresh(raw);
+    reply.setCookie(REFRESH_COOKIE, result.refreshToken, {
+      ...cookieOpts,
+      expires: result.refreshExpiresAt,
+    });
+    return { accessToken: result.accessToken };
+  });
+
+  app.post('/api/v1/auth/logout', async (req, reply) => {
+    await services.auth.logout(req.cookies[REFRESH_COOKIE]);
+    reply.clearCookie(REFRESH_COOKIE, { path: '/' });
+    return { ok: true };
+  });
+
+  // Verification
+  app.post('/api/v1/verification/age', { preHandler: [app.authenticate] }, async (req) => {
+    const body = parse(ageVerificationSchema, req.body);
+    return services.verification.submitAge(req.user!.id, body);
+  });
+
+  app.post(
+    '/api/v1/verification/fallback/start',
+    { preHandler: [app.authenticate] },
+    async (req) => {
+      const body = parse(verificationFallbackStartSchema, req.body);
+      return services.verification.startFallback(req.user!.id, body.method);
+    },
+  );
+
+  app.post(
+    '/api/v1/verification/fallback/complete',
+    { preHandler: [app.authenticate] },
+    async (req) => {
+      const body = parse(verificationFallbackCompleteSchema, req.body);
+      return services.verification.completeFallback(req.user!.id, body.method, body.providerRef);
+    },
+  );
+
+  // Me / interests
+  app.get('/api/v1/me', { preHandler: [app.authenticate] }, async (req) => {
+    return services.users.getMe(req.user!.id);
+  });
+
+  app.patch('/api/v1/me', { preHandler: [app.authenticate] }, async (req) => {
+    const body = parse(patchMeSchema, req.body);
+    return services.users.patchMe(req.user!.id, body);
+  });
+
+  app.put('/api/v1/me/interests', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const body = parse(putInterestsSchema, req.body);
+    return services.users.putInterests(req.user!.id, body);
+  });
+
+  app.get('/api/v1/interests', { preHandler: [app.authenticateVerified] }, async () => {
+    return services.users.listInterests();
+  });
+
+  app.get('/api/v1/matching/estimate', { preHandler: [app.authenticateVerified] }, async (req) => {
+    return services.sessions.estimate(req.user!.id);
+  });
+
+  // Sessions
+  app.get('/api/v1/sessions/:id', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const { id } = req.params as { id: string };
+    return services.sessions.getSummary(id, req.user!.id);
+  });
+
+  app.post('/api/v1/sessions/:id/end', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = parse(endSessionSchema, req.body);
+    return services.sessions.endSession(id, req.user!.id, body.reason);
+  });
+
+  app.post('/api/v1/sessions/:id/vibe', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = parse(vibeCheckSchema, req.body);
+    return services.sessions.vibe(id, req.user!.id, body);
+  });
+
+  app.post('/api/v1/sessions/:id/keep', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const { id } = req.params as { id: string };
+    return services.sessions.keep(id, req.user!.id);
+  });
+
+  app.post(
+    '/api/v1/sessions/:id/icebreaker/next',
+    { preHandler: [app.authenticateVerified] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      return services.sessions.nextIcebreaker(id, req.user!.id);
+    },
+  );
+
+  app.post(
+    '/api/v1/sessions/:id/moderation/frame',
+    { preHandler: [app.authenticateVerified] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const file = await req.file();
+      if (!file) throw new AppError('validation_error', 'Frame required', 400);
+      const buf = await file.toBuffer();
+      return services.moderation.scanFrame(id, req.user!.id, buf);
+    },
+  );
+
+  // Reports / blocks
+  app.post('/api/v1/reports', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const body = parse(createReportSchema, req.body);
+    return services.reports.create(req.user!.id, body);
+  });
+
+  app.post('/api/v1/blocks', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const body = parse(createBlockSchema, req.body);
+    return services.reports.block(req.user!.id, body.userId);
+  });
+
+  app.delete('/api/v1/blocks/:userId', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const { userId } = req.params as { userId: string };
+    return services.reports.unblock(req.user!.id, userId);
+  });
+
+  app.get('/api/v1/blocks', { preHandler: [app.authenticateVerified] }, async (req) => {
+    return services.reports.listBlocks(req.user!.id);
+  });
+
+  // Connections
+  app.get('/api/v1/connections', { preHandler: [app.authenticateVerified] }, async (req) => {
+    return services.connections.list(req.user!.id);
+  });
+
+  app.get('/api/v1/connections/:id', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const { id } = req.params as { id: string };
+    return services.connections.get(id, req.user!.id);
+  });
+
+  app.get(
+    '/api/v1/connections/:id/messages',
+    { preHandler: [app.authenticateVerified] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const q = req.query as { before?: string };
+      return services.connections.messages(
+        id,
+        req.user!.id,
+        q.before ? Number(q.before) : undefined,
+      );
+    },
+  );
+
+  app.post(
+    '/api/v1/connections/:id/messages',
+    { preHandler: [app.authenticateVerified] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const body = parse(sendMessageSchema, req.body);
+      return services.connections.send(id, req.user!.id, body.body, providers.moderation);
+    },
+  );
+
+  app.post(
+    '/api/v1/connections/:id/call',
+    { preHandler: [app.authenticateVerified] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      return services.connections.startCall(id, req.user!.id, providers, config.BLUR_FIRST_SECONDS);
+    },
+  );
+
+  // Public
+  app.get('/api/v1/public/stats', async () => {
+    const online = await prisma.user.count({ where: { ageVerified: true } });
+    return {
+      online: Math.max(online * 40, 128400),
+      medianConversationSec: 402,
+      reportsPer1000: 1.8,
+      languages: 41,
+    };
+  });
+
+  // Appeals
+  app.post('/api/v1/appeals', { preHandler: [app.authenticate] }, async (req) => {
+    const body = parse(createAppealSchema, req.body);
+    const row = await prisma.appeal.create({
+      data: {
+        enforcementId: BigInt(body.enforcementId),
+        userId: req.user!.id,
+        message: body.message,
+      },
+    });
+    return { id: Number(row.id), status: row.status };
+  });
+
+  // Billing stubs
+  app.post('/api/v1/billing/checkout', { preHandler: [app.authenticate] }, async () => {
+    return { url: null, message: 'Talkdrop Plus billing coming in v1' };
+  });
+
+  app.post('/api/v1/billing/webhook', async () => ({ received: true }));
+
+  // Admin
+  app.get('/api/v1/admin/overview', { preHandler: [app.authenticate] }, async (req) => {
+    return services.admin.overview(req.user!.id);
+  });
+
+  app.get('/api/v1/admin/reports', { preHandler: [app.authenticate] }, async (req) => {
+    const q = req.query as { status?: string };
+    return services.admin.listReports(req.user!.id, q.status);
+  });
+
+  app.get('/api/v1/admin/reports/:id', { preHandler: [app.authenticate] }, async (req) => {
+    const { id } = req.params as { id: string };
+    return services.admin.getReport(req.user!.id, Number(id));
+  });
+
+  app.post(
+    '/api/v1/admin/reports/:id/decision',
+    { preHandler: [app.authenticate] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const body = parse(adminDecisionSchema, req.body);
+      return services.admin.decide(req.user!.id, Number(id), body);
+    },
+  );
+
+  app.get('/api/v1/admin/audit', { preHandler: [app.authenticate] }, async (req) => {
+    return services.admin.audit(req.user!.id);
+  });
+
+  app.get('/api/v1/admin/policy', { preHandler: [app.authenticate] }, async (req) => {
+    return services.admin.getPolicy(req.user!.id);
+  });
+
+  app.patch('/api/v1/admin/policy', { preHandler: [app.authenticate] }, async (req) => {
+    const body = parse(adminPolicySchema, req.body);
+    return services.admin.patchPolicy(req.user!.id, body);
+  });
+
+  // Internal LiveKit webhook (signature verification stub for mock)
+  app.post('/internal/livekit/webhook', async (req) => {
+    const body = req.body as {
+      event?: string;
+      room?: { name?: string };
+      participant?: { identity?: string };
+    };
+    if (body.event === 'room_finished' && body.room?.name) {
+      await prisma.session.updateMany({
+        where: { livekitRoom: body.room.name, status: { in: ['live', 'connecting'] } },
+        data: { status: 'ended', endedAt: new Date(), endReason: 'hangup' },
+      });
+    }
+    if (body.event === 'participant_joined' && body.room?.name) {
+      await prisma.session.updateMany({
+        where: { livekitRoom: body.room.name, status: 'connecting' },
+        data: { status: 'live', startedAt: new Date() },
+      });
+    }
+    return { ok: true };
+  });
+}

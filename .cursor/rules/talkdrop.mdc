@@ -1,0 +1,15 @@
+---
+description: Talkdrop monorepo conventions
+globs:
+  - "**/*"
+---
+
+- Monorepo with pnpm workspaces. Packages: apps/web, apps/api, apps/worker, packages/shared, packages/ui.
+- Product name is Talkdrop (never Meetglow in user-facing copy or package names).
+- All request/response/socket payload types and zod schemas live in packages/shared.
+- API: Fastify + zod + Prisma. Controllers thin, services hold logic. No raw SQL except migrations and matcher Lua.
+- Web: React 18, Vite, React Router, TanStack Query, Zustand for ephemeral UI/call state.
+- Styling: CSS variables from packages/ui/tokens.css. No hard-coded hex in components.
+- Safety: never store raw video or audio. Evidence only via evidence path, encrypted, 24h expiry.
+- Secrets only via environment variables; never commit .env. Provide .env.example.
+- Decisions marked LOCKED in docs/SPEC.md (PostgreSQL, React, Node.js) must not change without approval.
