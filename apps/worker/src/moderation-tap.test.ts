@@ -5,9 +5,24 @@ function mockDeps(overrides: Partial<ModerationTapDeps> = {}): ModerationTapDeps
   const events: unknown[] = [];
   const publishes: Array<{ channel: string; payload: string }> = [];
   return {
-    mock: true,
     nudityCut: 0.85,
     forceFlagSessionIds: new Set(['sess-flag']),
+    livekit: {
+      mock: true,
+      url: 'ws://localhost:7880',
+      apiKey: 'devkey',
+      apiSecret: 'secret',
+      createRoom: async () => undefined,
+      createToken: async () => ({ url: 'ws://localhost:7880', token: 't' }),
+      listParticipants: async () => [],
+    },
+    sampler: {
+      sampleRoom: async (room, sessionId) => ({
+        buffer: Buffer.from(`server-tap:${sessionId}:${Date.now()}`),
+        source: 'synthetic' as const,
+      }),
+      disconnectAll: async () => undefined,
+    },
     moderation: {
       scanImage: async (buf) => {
         const text = buf.toString('utf8');

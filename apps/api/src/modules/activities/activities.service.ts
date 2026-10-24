@@ -1,3 +1,22 @@
+export const COWATCH_CATALOG = [
+  {
+    id: 'jazz-short',
+    title: '30s jazz short',
+    // Creative Commons / sample clip (Big Buck Bunny excerpt via Google CDN mirror)
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+  },
+  {
+    id: 'street-food',
+    title: 'Street food reel',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+  },
+  {
+    id: 'city-walk',
+    title: 'Night city walk',
+    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
+  },
+] as const;
+
 const WYR = [
   {
     prompt: 'Would you rather…',
@@ -44,7 +63,6 @@ export class ActivitiesService {
       prompt: item.prompt,
       options: item.options,
       roundId: `trivia_${seed}`,
-      // answer withheld from clients until reveal
       _answer: item.answer,
     };
   }
@@ -55,24 +73,38 @@ export class ActivitiesService {
     return { correct: choice === item.answer, answer: item.answer };
   }
 
-  /** Co-draw / co-watch stubs — shared canvas & watch party land later; keep round UX live. */
+  /** Shared canvas session — strokes sync over sockets. */
   startCoDraw(seed = Date.now()) {
     return {
       activity: 'co-draw' as const,
-      prompt: 'Co-draw (stub): pick a theme — your strokes sync later.',
+      prompt: 'Co-draw together — strokes sync live.',
       options: ['Night city skyline', 'One shared doodle word'] as [string, string],
       roundId: `codraw_${seed}`,
-      stub: true as const,
+      canvas: { width: 640, height: 360, theme: seed % 2 === 0 ? 'skyline' : 'word' },
+      stub: false as const,
     };
   }
 
+  /** Shared watch party — catalog + player state sync over sockets. */
   startCoWatch(seed = Date.now()) {
+    const clip = COWATCH_CATALOG[seed % COWATCH_CATALOG.length]!;
     return {
       activity: 'co-watch' as const,
-      prompt: 'Co-watch (stub): pick a clip to watch together.',
-      options: ['30s jazz short', 'Street food reel'] as [string, string],
+      prompt: 'Co-watch — pick a clip; play/pause/seek stay in sync.',
+      options: [COWATCH_CATALOG[0]!.title, COWATCH_CATALOG[1]!.title] as [string, string],
       roundId: `cowatch_${seed}`,
-      stub: true as const,
+      catalog: COWATCH_CATALOG.map((c) => ({ id: c.id, title: c.title, url: c.url })),
+      state: {
+        videoId: clip.id,
+        url: clip.url,
+        playing: false,
+        positionSec: 0,
+      },
+      stub: false as const,
     };
+  }
+
+  resolveCoWatchVideo(videoId: string) {
+    return COWATCH_CATALOG.find((c) => c.id === videoId) ?? COWATCH_CATALOG[0]!;
   }
 }

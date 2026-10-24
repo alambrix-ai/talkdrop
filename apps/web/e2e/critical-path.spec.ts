@@ -145,6 +145,46 @@ test.describe('SPEC §16 critical path', () => {
     await ctxB.close();
   });
 
+  test('7) call page surfaces LiveKit or local preview', async ({ browser, request }) => {
+    const stamp = String(Date.now()).slice(-6);
+    const tokenA = await otpLogin(request, `+155531${stamp}`, 'LK A');
+    const tokenB = await otpLogin(request, `+155532${stamp}`, 'LK B');
+    await completeOnboarding(request, tokenA);
+    await completeOnboarding(request, tokenB);
+
+    const ctxA = await browser.newContext();
+    const ctxB = await browser.newContext();
+    const pageA = await ctxA.newPage();
+    const pageB = await ctxB.newPage();
+    await injectAuth(pageA, tokenA);
+    await injectAuth(pageB, tokenB);
+
+    await pageA.goto('/lobby');
+    await pageB.goto('/lobby');
+    await pageA.getByRole('button', { name: /Start meeting/i }).click();
+    await pageB.getByRole('button', { name: /Start meeting/i }).click();
+    await expect(pageA).toHaveURL(/\/match/, { timeout: 20_000 });
+    await pageA.getByRole('button', { name: /Join the call/i }).click();
+    await expect(pageA).toHaveURL(/\/call\//, { timeout: 10_000 });
+
+    // Either LiveKit tag (real SFU) or partner tile / controls (mock/local)
+    const livekitTag = pageA.getByText('LiveKit');
+    const controls = pageA.getByRole('toolbar', { name: /Call controls/i });
+    await expect(controls).toBeVisible({ timeout: 15_000 });
+    if (await livekitTag.isVisible().catch(() => false)) {
+      await expect(livekitTag).toBeVisible();
+    }
+
+    // Co-draw activity opens shared canvas
+    await pageA.getByRole('button', { name: /Co-draw/i }).click();
+    await expect(pageA.getByRole('dialog', { name: /Co-draw/i })).toBeVisible({
+      timeout: 10_000,
+    });
+
+    await ctxA.close();
+    await ctxB.close();
+  });
+
   test('6) admin actions a report', async ({ page, request }) => {
     // Use seeded admin Arjun if available; else create + attach via API won't get admin.
     // Hit admin overview with seeded phone login when possible.

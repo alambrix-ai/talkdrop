@@ -11,10 +11,11 @@ const envSchema = z.object({
   LIVEKIT_URL: z.string().default('ws://localhost:7880'),
   LIVEKIT_API_KEY: z.string().default('devkey'),
   LIVEKIT_API_SECRET: z.string().default('secret'),
+  // Default false → real SFU when Compose LiveKit is up. Set LIVEKIT_MOCK=true to force mock.
   LIVEKIT_MOCK: z
     .string()
     .optional()
-    .transform((v) => v !== 'false'),
+    .transform((v) => v === 'true'),
   S3_ENDPOINT: z.string().default('http://localhost:9000'),
   S3_BUCKET: z.string().default('talkdrop-evidence'),
   S3_ACCESS_KEY: z.string().default('minio'),
@@ -25,8 +26,10 @@ const envSchema = z.object({
     .optional()
     .transform((v) => v !== 'false'),
   SMS_PROVIDER: z.string().default('mock'),
-  AGE_PROVIDER: z.string().default('mock'),
+  AGE_PROVIDER: z.string().default('ondevice'),
   MODERATION_PROVIDER: z.string().default('mock'),
+  STT_PROVIDER: z.string().default('local'),
+  MT_PROVIDER: z.string().default('mymemory'),
   MOD_NUDITY_CUT: z.coerce.number().default(0.85),
   MOD_NUDITY_REVIEW: z.coerce.number().default(0.6),
   MOD_TOXICITY_CUT: z.coerce.number().default(0.9),
@@ -37,6 +40,8 @@ const envSchema = z.object({
   WEB_ORIGIN: z.string().default('http://localhost:5173'),
   API_ORIGIN: z.string().default('http://localhost:4000'),
   API_PORT: z.coerce.number().default(4000),
+  /** Talkdrop Plus billing stays mock until payments launch (intentionally deferred). */
+  BILLING_PROVIDER: z.string().default('mock'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

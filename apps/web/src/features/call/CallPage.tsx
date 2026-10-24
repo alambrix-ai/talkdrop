@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -12,7 +12,19 @@ import { api, apiForm } from '../../lib/api';
 import { connectSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
 import { LocalVideo } from '../../components/LocalVideo';
+import { connectLiveKitRoom, type LiveKitHandles } from '../../lib/livekit-room';
 import { ReportSheet } from '../report/ReportSheet';
+import { CoDrawCanvas } from './CoDrawCanvas';
+import { CoWatchPlayer } from './CoWatchPlayer';
+
+type ActivityState = {
+  prompt: string;
+  options: [string, string];
+  activity: string;
+  canvas?: { width: number; height: number; theme: string };
+  catalog?: Array<{ id: string; title: string; url: string }>;
+  state?: { videoId: string; url: string; playing: boolean; positionSec: number };
+};
 
 export default function CallPage() {
   const { sessionId = '' } = useParams();
@@ -30,14 +42,16 @@ export default function CallPage() {
   const [cutOpen, setCutOpen] = useState(false);
   const [cutMessage, setCutMessage] = useState('');
   const [caption, setCaption] = useState<string | null>(null);
-  const [activity, setActivity] = useState<{
-    prompt: string;
-    options: [string, string];
-    activity: string;
-  } | null>(null);
+  const [activity, setActivity] = useState<ActivityState | null>(null);
+  const [showCoDraw, setShowCoDraw] = useState(false);
+  const [showCoWatch, setShowCoWatch] = useState(false);
   const [avatarOnly, setAvatarOnly] = useState(me?.profile.avatarFirst ?? false);
   const [effect, setEffect] = useState<EffectId>('none');
   const [reconnecting, setReconnecting] = useState(false);
+  const [lkConnected, setLkConnected] = useState(false);
+  const remoteRef = useRef<HTMLVideoElement>(null);
+  const localLkRef = useRef<HTMLVideoElement>(null);
+  const lkRef = useRef<LiveKitHandles | null>(null);
 
   const effectFilter =
     effect === 'warm'
@@ -73,6 +87,45 @@ export default function CallPage() {
     if (elapsed === 180) setToast('Enjoying this? Keep in touch or play a game.');
   }, [elapsed, setToast]);
 
+  // LiveKit SFU join (real when VITE_LIVEKIT_MOCK≠true)
+  useEffect(() => {
+    let cancelled = false;
+    async function join() {
+      const lk = session.data?.livekit ?? match?.livekit;
+      if (!lk?.url || !lk.token) return;
+      try {
+        const handles = await connectLiveKitRoom(lk);
+        if (cancelled) {
+          await handles?.disconnect();
+          return;
+        }
+        if (!handles) return;
+        lkRef.current = handles;
+        setLkConnected(true);
+        if (remoteRef.current) handles.attachRemote(remoteRef.current);
+        if (localLkRef.current) handles.attachLocal(localLkRef.current);
+      } catch (err) {
+        console.warn('[livekit] connect failed', err);
+        setToast('LiveKit connect failed — using local preview');
+      }
+    }
+    void join();
+    return () => {
+      cancelled = true;
+      void lkRef.current?.disconnect();
+      lkRef.current = null;
+      setLkConnected(false);
+    };
+  }, [session.data?.livekit, match?.livekit, setToast]);
+
+  useEffect(() => {
+    void lkRef.current?.setMicEnabled(!muted);
+  }, [muted]);
+
+  useEffect(() => {
+    void lkRef.current?.setCamEnabled(!cameraOff && !avatarOnly);
+  }, [cameraOff, avatarOnly]);
+
   useEffect(() => {
     const socket = connectSocket();
     const onEnded = (payload: { reason: string; sessionId?: string }) => {
@@ -85,15 +138,13 @@ export default function CallPage() {
     };
     const onIce = (payload: { text: string }) => setIcebreaker(payload.text);
     const onCaption = (payload: { text: string; translatedTo?: string | null }) => {
-      setCaption(
-        payload.translatedTo ? `${payload.text} (translated)` : payload.text,
-      );
+      setCaption(payload.translatedTo ? `${payload.text} (translated)` : payload.text);
     };
-    const onActivity = (payload: {
-      prompt: string;
-      options: [string, string];
-      activity: string;
-    }) => setActivity(payload);
+    const onActivity = (payload: ActivityState) => {
+      setActivity(payload);
+      if (payload.activity === 'co-draw') setShowCoDraw(true);
+      if (payload.activity === 'co-watch') setShowCoWatch(true);
+    };
     const onAvatar = (payload: { avatarOnly: boolean; userId: string }) => {
       if (payload.userId !== me?.id) setAvatarOnly(payload.avatarOnly);
     };
@@ -190,28 +241,27 @@ export default function CallPage() {
   }
 
   function startActivity(kind: 'would-you-rather' | 'trivia' | 'co-draw' | 'co-watch') {
-    const socket = connectSocket();
-    socket.emit(ClientEvents.ACTIVITY_START, { sessionId, activity: kind });
+    connectSocket().emit(ClientEvents.ACTIVITY_START, { sessionId, activity: kind });
   }
 
-  function applyEffect(next: EffectId) {
-    setEffect(next);
-    connectSocket().emit(ClientEvents.EFFECT_SET, { sessionId, effect: next });
+  function applyEffect(nextFx: EffectId) {
+    setEffect(nextFx);
+    connectSocket().emit(ClientEvents.EFFECT_SET, { sessionId, effect: nextFx });
   }
 
   function choose(choice: 'a' | 'b') {
     connectSocket().emit(ClientEvents.ACTIVITY_UPDATE, { sessionId, choice });
-    setToast(
-      (choice === 'a' ? activity?.options[0] : activity?.options[1]) ?? 'Choice sent',
-    );
+    setToast((choice === 'a' ? activity?.options[0] : activity?.options[1]) ?? 'Choice sent');
   }
 
   function toggleAvatar() {
-    const next = !avatarOnly;
-    setAvatarOnly(next);
-    setCameraOff(next);
-    connectSocket().emit(ClientEvents.AVATAR_CONSENT, { sessionId, consent: !next });
+    const nextAv = !avatarOnly;
+    setAvatarOnly(nextAv);
+    setCameraOff(nextAv);
+    connectSocket().emit(ClientEvents.AVATAR_CONSENT, { sessionId, consent: !nextAv });
   }
+
+  const showRemoteVideo = lkConnected && !avatarOnly;
 
   return (
     <div
@@ -248,7 +298,7 @@ export default function CallPage() {
 
       <VideoTile
         blurred={blurred}
-        placeholder={!partner || avatarOnly}
+        placeholder={!partner || avatarOnly || !showRemoteVideo}
         style={{
           position: 'absolute',
           inset: 0,
@@ -256,23 +306,39 @@ export default function CallPage() {
           filter: effectFilter,
           transition: 'filter 280ms ease',
         }}
-        overlays={
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'grid',
-              placeItems: 'center',
-              color: 'var(--cream)',
-              fontFamily: 'var(--font-display)',
-              fontSize: 48,
-              opacity: 0.85,
-            }}
-          >
-            {avatarOnly ? 'Avatar mode' : partner?.displayName?.slice(0, 1) ?? '?'}
-          </div>
-        }
-      />
+      >
+        <video
+          ref={remoteRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: showRemoteVideo ? 'block' : 'none',
+          }}
+          playsInline
+          autoPlay
+          aria-label="Partner video"
+        />
+      </VideoTile>
+
+      {!showRemoteVideo ? (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+            color: 'var(--cream)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 48,
+            opacity: 0.85,
+            pointerEvents: 'none',
+            filter: effectFilter,
+          }}
+        >
+          {avatarOnly ? 'Avatar mode' : partner?.displayName?.slice(0, 1) ?? '?'}
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -301,6 +367,20 @@ export default function CallPage() {
           >
             You
           </div>
+        ) : lkConnected ? (
+          <video
+            ref={localLkRef}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              transform: 'scaleX(-1)',
+            }}
+            playsInline
+            muted
+            autoPlay
+            aria-label="Your camera"
+          />
         ) : (
           <LocalVideo muted={muted} cameraOff={cameraOff} />
         )}
@@ -327,6 +407,7 @@ export default function CallPage() {
           <Tag>
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timer}</span>
           </Tag>
+          {lkConnected ? <Tag variant="mint">LiveKit</Tag> : null}
         </div>
         <div style={{ marginTop: 10 }}>
           <Tag variant="mint">
@@ -366,7 +447,7 @@ export default function CallPage() {
         </Card>
       ) : null}
 
-      {activity ? (
+      {activity && activity.activity !== 'co-draw' && activity.activity !== 'co-watch' ? (
         <Card
           style={{
             position: 'absolute',
@@ -389,6 +470,23 @@ export default function CallPage() {
             </Button>
           </div>
         </Card>
+      ) : null}
+
+      {showCoDraw && activity?.activity === 'co-draw' ? (
+        <CoDrawCanvas
+          sessionId={sessionId}
+          theme={activity.canvas?.theme}
+          onClose={() => setShowCoDraw(false)}
+        />
+      ) : null}
+
+      {showCoWatch && activity?.activity === 'co-watch' && activity.catalog && activity.state ? (
+        <CoWatchPlayer
+          sessionId={sessionId}
+          catalog={activity.catalog}
+          initial={activity.state}
+          onClose={() => setShowCoWatch(false)}
+        />
       ) : null}
 
       <Card

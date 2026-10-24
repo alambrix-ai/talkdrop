@@ -5,7 +5,7 @@ import {
 } from '@talkdrop/shared';
 import type { PrismaClient } from '@prisma/client';
 import type Redis from 'ioredis';
-import { SignJWT } from 'jose';
+import type { LiveKitProvider } from '@talkdrop/shared';
 
 const POOL_KEY = 'pool:global:all';
 const TICKET_PREFIX = 'ticket:';
@@ -28,20 +28,8 @@ export interface MatcherDeps {
   redis: Redis;
   prisma: PrismaClient;
   livekitUrl: string;
+  livekit: LiveKitProvider;
   widenAfterMs: number;
-}
-
-async function mockToken(room: string, identity: string, name: string): Promise<string> {
-  const secret = new TextEncoder().encode('mock-livekit-secret');
-  return new SignJWT({
-    video: { roomJoin: true, room, canPublish: true, canSubscribe: true },
-    name,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setSubject(identity)
-    .setIssuedAt()
-    .setExpirationTime('10m')
-    .sign(secret);
 }
 
 export async function runMatchCycle(deps: MatcherDeps): Promise<number> {
@@ -97,6 +85,7 @@ export async function runMatchCycle(deps: MatcherDeps): Promise<number> {
       where: { id: session.id },
       data: { livekitRoom: room },
     });
+    await deps.livekit.createRoom(room);
 
     await deps.prisma.matchEvent.create({
       data: {
@@ -126,7 +115,11 @@ export async function runMatchCycle(deps: MatcherDeps): Promise<number> {
       const shared = selfUser.interests
         .map((i) => i.interest.label)
         .filter((l) => otherUser.interests.some((oi) => oi.interest.label === l));
-      const token = await mockToken(room, self.userId, selfUser.displayName);
+      const livekit = await deps.livekit.createToken({
+        roomName: room,
+        identity: self.userId,
+        name: selfUser.displayName,
+      });
       await deps.redis.publish(
         MATCH_CHANNEL,
         JSON.stringify({
@@ -140,7 +133,7 @@ export async function runMatchCycle(deps: MatcherDeps): Promise<number> {
           },
           sharedInterests: shared,
           icebreaker: session.icebreaker,
-          livekit: { url: deps.livekitUrl, token },
+          livekit,
         }),
       );
     }

@@ -6,6 +6,8 @@ import { runMatchCycle } from './matcher.js';
 import { expireEvidence, recomputeTrust, updateStreaks } from './jobs.js';
 import { startModerationTap } from './moderation-tap.js';
 import { MockModerationProvider } from './mock-moderation.js';
+import { createWorkerLiveKit } from './livekit.js';
+import { createFrameSampler } from './frame-sampler.js';
 
 function loadEnvFile() {
   const candidates = [
@@ -37,8 +39,8 @@ const redis = new Redis(process.env.REDIS_URL ?? 'redis://localhost:6379', {
 const matchInterval = Number(process.env.MATCH_INTERVAL_MS ?? 300);
 const widenAfterMs = Number(process.env.MATCH_WIDEN_AFTER_MS ?? 8000);
 const blurFirstSeconds = Number(process.env.BLUR_FIRST_SECONDS ?? 15);
-const livekitUrl = process.env.LIVEKIT_URL ?? 'ws://localhost:7880';
-const livekitMock = process.env.LIVEKIT_MOCK !== 'false';
+const livekit = createWorkerLiveKit();
+const sampler = createFrameSampler(livekit);
 
 const mockStorage = {
   async deleteObject(key: string) {
@@ -52,8 +54,7 @@ setInterval(() => {
   void runMatchCycle({
     redis,
     prisma,
-    livekitUrl,
-    livekitMock,
+    livekit,
     widenAfterMs,
     blurFirstSeconds,
   }).catch((err) => console.error('[matcher]', err));
@@ -65,7 +66,8 @@ const stopModTap = startModerationTap(
     redis,
     moderation: new MockModerationProvider(),
     nudityCut: Number(process.env.MOD_NUDITY_CUT ?? 0.85),
-    mock: livekitMock,
+    livekit,
+    sampler,
   },
   2000,
   (msg) => console.info(msg),

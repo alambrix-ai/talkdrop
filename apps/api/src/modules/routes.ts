@@ -73,7 +73,7 @@ export function createServices(config: AppConfig, providers: Providers): Service
     billing: new BillingService(),
     rooms: new RoomsService(),
     activities: new ActivitiesService(),
-    captions: new CaptionsService(),
+    captions: new CaptionsService(providers.stt, providers.mt),
     privacy: new PrivacyService(),
   };
 }
@@ -400,7 +400,7 @@ export async function registerRoutes(
     },
   );
 
-  // Captions sample (client polls or socket pushes)
+  // Captions — streaming poll + audio STT upload
   app.get(
     '/api/v1/sessions/:id/captions/next',
     { preHandler: [app.authenticateVerified] },
@@ -409,11 +409,32 @@ export async function registerRoutes(
       const me = await services.users.getMe(req.user!.id);
       await services.sessions.getSummary(id, req.user!.id);
       const tick = Number((req.query as { tick?: string }).tick ?? Date.now());
-      const translateTo =
-        me.plan === 'plus' ? me.profile.translateTo ?? 'en' : me.profile.captions ? null : null;
+      const translateTo = me.plan === 'plus' ? me.profile.translateTo ?? 'en' : null;
+      const line = services.captions.nextLine(tick, translateTo);
       return {
         sessionId: id,
-        ...services.captions.nextLine(tick, me.plan === 'plus' ? translateTo ?? 'en' : null),
+        ...(await services.captions.translateAsync(line, translateTo)),
+      };
+    },
+  );
+
+  app.post(
+    '/api/v1/sessions/:id/captions/audio',
+    { preHandler: [app.authenticateVerified] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const me = await services.users.getMe(req.user!.id);
+      await services.sessions.getSummary(id, req.user!.id);
+      const file = await req.file();
+      if (!file) throw new AppError('validation_error', 'Audio chunk required', 400);
+      const buf = await file.toBuffer();
+      const locale =
+        (req.query as { locale?: string }).locale ?? me.profile.languages?.[0] ?? 'en';
+      const translateTo = me.plan === 'plus' ? me.profile.translateTo ?? 'en' : null;
+      const line = await services.captions.fromAudio(buf, locale, translateTo);
+      return {
+        sessionId: id,
+        ...(await services.captions.translateAsync(line, translateTo)),
       };
     },
   );

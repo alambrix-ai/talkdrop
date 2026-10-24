@@ -113,6 +113,22 @@ export const effectSetSchema = z.object({
   userId: z.string().uuid().optional(),
 });
 
+export const codrawStrokeSchema = z.object({
+  sessionId: z.string().uuid(),
+  strokeId: z.string().min(1),
+  points: z.array(z.object({ x: z.number(), y: z.number() })).min(1),
+  color: z.string().default('#4A4A4A'),
+  width: z.number().min(1).max(24).default(3),
+});
+
+export const cowatchStateSchema = z.object({
+  sessionId: z.string().uuid(),
+  videoId: z.string().min(1),
+  playing: z.boolean(),
+  positionSec: z.number().min(0),
+  updatedAt: z.number().optional(),
+});
+
 export const ClientEvents = {
   QUEUE_JOIN: 'queue:join',
   QUEUE_LEAVE: 'queue:leave',
@@ -127,8 +143,12 @@ export const ClientEvents = {
   CHAT_READ: 'chat:read',
   CHAT_TYPING: 'chat:typing',
   CAPTIONS_TOGGLE: 'captions:toggle',
+  CAPTION_CLIENT_LINE: 'caption:clientLine',
   AVATAR_CONSENT: 'avatar:consent',
   EFFECT_SET: 'effect:set',
+  CODRAW_STROKE: 'codraw:stroke',
+  CODRAW_CLEAR: 'codraw:clear',
+  COWATCH_STATE: 'cowatch:state',
 } as const;
 
 /** Server → client event names */
@@ -151,6 +171,9 @@ export const ServerEvents = {
   CAPTION_LINE: 'caption:line',
   AVATAR_MODE: 'avatar:mode',
   EFFECT_SET: 'effect:set',
+  CODRAW_STROKE: 'codraw:stroke',
+  CODRAW_CLEAR: 'codraw:clear',
+  COWATCH_STATE: 'cowatch:state',
 } as const;
 
 export type QueueJoin = z.infer<typeof queueJoinSchema>;

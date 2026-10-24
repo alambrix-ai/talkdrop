@@ -2,6 +2,32 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.3.0 — 2026-10-25
+
+### Production adapters (billing deferred)
+- **LiveKit SFU** — real `RoomServiceClient` + `AccessToken` when `LIVEKIT_MOCK=false` (default); Compose LiveKit is the local SFU; soft-fail if SFU down. Call UI joins via `livekit-client`.
+- **Server mod tap** — hidden-subscriber token + `@livekit/rtc-node` frame sampler when installed; room-meta fallback; `MOD_FORCE_FLAG` retained for chaos.
+- **SMS** — Twilio + MessageBird adapters; mock **only** when `SMS_PROVIDER=mock`.
+- **Age** — `ondevice` default + document-check redirect stub (`AGE_DOCUMENT_REDIRECT_URL`); see `docs/AGE_VERIFICATION.md`.
+- **Captions** — Deepgram / Whisper STT + LibreTranslate / MyMemory MT behind env; local streaming fallback still streams lines; audio upload + client-line sockets.
+- **Co-draw / Co-watch** — shared canvas strokes + synced video player over sockets (no longer prompt stubs).
+- **Effects** — client CSS filters + server redis hook on `effect:set`.
+- **Billing** — **intentionally still mock** (`BILLING_PROVIDER=mock`); Stripe/Razorpay not expanded.
+- **E2E** — Playwright critical path + LiveKit-aware call assertion when SFU reachable.
+
+### Done vs needs API keys
+
+| Capability | Ready locally | Needs keys / infra |
+|------------|---------------|--------------------|
+| LiveKit rooms + join | Compose `livekit` | Cloud LiveKit project for prod |
+| Hidden mod tap frames | rtc-node optional; meta fallback | `@livekit/rtc-node` native for real frames |
+| SMS OTP | `SMS_PROVIDER=mock` | Twilio or MessageBird keys |
+| Age on-device | Yes | Document vendor URL |
+| Captions stream | `STT_PROVIDER=local` | Deepgram / OpenAI Whisper |
+| Translation | MyMemory / identity | LibreTranslate URL or paid MT |
+| Co-draw / co-watch | Yes | — |
+| Plus billing | Mock checkout only | **Deferred** — no Stripe/Razorpay |
+
 ## 0.2.0 — 2026-10-25
 
 ### Phase 6 — Hardening and launch prep
