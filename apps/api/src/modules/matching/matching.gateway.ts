@@ -35,6 +35,19 @@ export class MatchingGateway {
       .map((m) => (m.userA === userId ? m.userB : m.userA))
       .filter((x): x is string => Boolean(x));
 
+    // Plus match filters: client prefs OR saved filters (Premium only)
+    let filters = prefs.filters;
+    if (user.plan === 'plus') {
+      const redis = getRedis();
+      const saved = await redis.get(`filters:${userId}`);
+      if (saved) {
+        const parsed = JSON.parse(saved) as { regions?: string[]; languages?: string[] };
+        filters = { ...parsed, ...filters };
+      }
+    } else if (filters?.regions?.length || filters?.languages?.length) {
+      throw new Error('plus_required');
+    }
+
     const ticket: MatchTicket = {
       userId,
       interests: prefs.interests,
@@ -48,7 +61,7 @@ export class MatchingGateway {
       joinedAt: Date.now(),
       ageVerified: user.ageVerified,
       lastHeartbeat: Date.now(),
-      filters: prefs.filters,
+      filters,
     };
 
     const redis = getRedis();

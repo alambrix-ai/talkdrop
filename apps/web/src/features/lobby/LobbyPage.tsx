@@ -1,17 +1,34 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ClientEvents, ServerEvents, type MatchFound } from '@talkdrop/shared';
 import { Button, Card, Orb, Tag } from '@talkdrop/ui';
 import { LocalVideo } from '../../components/LocalVideo';
+import { api } from '../../lib/api';
 import { connectSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
+
+interface RoomRow {
+  id: string;
+  title: string | null;
+  startsAt: string | null;
+  joinedCount: number;
+  language: string | null;
+  open: boolean;
+}
 
 export default function LobbyPage() {
   const me = useAppStore((s) => s.me);
   const setMatch = useAppStore((s) => s.setMatch);
+  const setToast = useAppStore((s) => s.setToast);
   const navigate = useNavigate();
   const [waiting, setWaiting] = useState(false);
   const [waitHint, setWaitHint] = useState<string | null>(null);
+
+  const rooms = useQuery({
+    queryKey: ['rooms'],
+    queryFn: () => api<RoomRow[]>('/rooms'),
+  });
 
   useEffect(() => {
     const socket = connectSocket();
@@ -49,16 +66,29 @@ export default function LobbyPage() {
     );
   }
 
+  async function joinRoom(id: string) {
+    try {
+      const res = await api<{ sessionId: string }>(`/rooms/${id}/join`, { method: 'POST' });
+      setToast('Joined room — group roulette scaffolding');
+      navigate(`/call/${res.sessionId}`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Could not join room');
+    }
+  }
+
   const firstName = me?.displayName?.split(' ')[0] ?? 'friend';
 
   return (
     <main className="shell page" style={{ textAlign: 'center' }}>
+      <a className="skip-link" href="#start-meeting">
+        Skip to start meeting
+      </a>
       <div style={{ display: 'grid', placeItems: 'center', gap: 20, paddingTop: 24 }}>
         <Orb size={168} withPulses />
         <h1 className="h1" style={{ fontSize: 'clamp(34px, 4vw, 52px)' }}>
           Ready when you are, {firstName}.
         </h1>
-        <p className="mute">
+        <p className="mute" id="lobby-status" aria-live="polite">
           {waiting
             ? waitHint ?? 'Looking for someone who shares your vibe…'
             : 'People online who match your interests are a few seconds away.'}
@@ -71,6 +101,7 @@ export default function LobbyPage() {
           ))}
         </div>
         <Button
+          id="start-meeting"
           style={{ minHeight: 58, minWidth: 220 }}
           loading={waiting}
           onClick={startMeeting}
@@ -97,6 +128,7 @@ export default function LobbyPage() {
             <div style={{ fontWeight: 700 }}>Camera and mic ready</div>
             <div className="mute" style={{ fontSize: 14 }}>
               Blur first 15 s {me?.profile.blurFirst ? 'on' : 'off'}
+              {me?.profile.avatarFirst ? ' · Avatar first' : ''}
             </div>
             <Link to="/onboarding" style={{ fontWeight: 600, fontSize: 14 }}>
               Edit
@@ -105,12 +137,9 @@ export default function LobbyPage() {
         </Card>
         <Card style={{ padding: 18 }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Rooms tonight</div>
-          {[
-            { title: 'Speak Spanish night', time: '8:30 PM', n: 126 },
-            { title: 'Startup pitch roulette', time: '9:00 PM', n: 84 },
-          ].map((r) => (
+          {(rooms.data ?? []).slice(0, 4).map((r) => (
             <div
-              key={r.title}
+              key={r.id}
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -123,14 +152,25 @@ export default function LobbyPage() {
               <div>
                 <div style={{ fontWeight: 600 }}>{r.title}</div>
                 <div className="mute" style={{ fontSize: 13 }}>
-                  {r.time} · {r.n} joined
+                  {r.startsAt
+                    ? new Date(r.startsAt).toLocaleTimeString([], {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      })
+                    : 'Open'}{' '}
+                  · {r.joinedCount} joined
                 </div>
               </div>
-              <Button size="sm" variant="ghost" disabled>
-                Soon
+              <Button size="sm" variant="ghost" onClick={() => void joinRoom(r.id)}>
+                Join
               </Button>
             </div>
           ))}
+          {!rooms.data?.length ? (
+            <p className="mute" style={{ fontSize: 14 }}>
+              Seed rooms will appear after `pnpm db:seed`.
+            </p>
+          ) : null}
         </Card>
       </div>
       <style>{`

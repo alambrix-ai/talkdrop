@@ -84,7 +84,7 @@ export const icebreakerNewSchema = z.object({
 
 export const activityStartSchema = z.object({
   sessionId: z.string().uuid(),
-  activity: z.literal('would-you-rather'),
+  activity: z.enum(['would-you-rather', 'trivia', 'co-draw', 'co-watch']),
   prompt: z.string(),
   options: z.tuple([z.string(), z.string()]),
 });
@@ -96,6 +96,23 @@ export const activityUpdateSchema = z.object({
 });
 
 /** Client → server event names */
+export const captionLineSchema = z.object({
+  sessionId: z.string().uuid(),
+  speakerLocale: z.string(),
+  text: z.string(),
+  original: z.string().optional(),
+  translatedTo: z.string().nullable().optional(),
+});
+
+export const effectIdSchema = z.enum(['none', 'warm', 'mono', 'soft']);
+export type EffectId = z.infer<typeof effectIdSchema>;
+
+export const effectSetSchema = z.object({
+  sessionId: z.string().uuid(),
+  effect: effectIdSchema,
+  userId: z.string().uuid().optional(),
+});
+
 export const ClientEvents = {
   QUEUE_JOIN: 'queue:join',
   QUEUE_LEAVE: 'queue:leave',
@@ -109,6 +126,9 @@ export const ClientEvents = {
   CHAT_SEND: 'chat:send',
   CHAT_READ: 'chat:read',
   CHAT_TYPING: 'chat:typing',
+  CAPTIONS_TOGGLE: 'captions:toggle',
+  AVATAR_CONSENT: 'avatar:consent',
+  EFFECT_SET: 'effect:set',
 } as const;
 
 /** Server → client event names */
@@ -128,6 +148,9 @@ export const ServerEvents = {
   CALL_INCOMING: 'call:incoming',
   TRUST_UPDATED: 'trust:updated',
   ACCOUNT_RESTRICTED: 'account:restricted',
+  CAPTION_LINE: 'caption:line',
+  AVATAR_MODE: 'avatar:mode',
+  EFFECT_SET: 'effect:set',
 } as const;
 
 export type QueueJoin = z.infer<typeof queueJoinSchema>;

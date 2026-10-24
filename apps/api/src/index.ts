@@ -5,6 +5,7 @@ import { buildApp } from './app.js';
 import { prisma } from './lib/prisma.js';
 import { getRedis } from './lib/redis.js';
 import { startMatcherLoop } from './modules/matching/run-cycle.js';
+import { initOtel } from './lib/metrics.js';
 
 function loadEnvFile() {
   const candidates = [
@@ -29,6 +30,7 @@ function loadEnvFile() {
 loadEnvFile();
 
 const config = loadConfig();
+await initOtel('talkdrop-api');
 const { app } = await buildApp(config);
 
 await app.listen({ port: config.API_PORT, host: '0.0.0.0' });

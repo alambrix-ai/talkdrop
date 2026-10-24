@@ -1,0 +1,27 @@
+# Skeleton values — replace with real images/secrets before production.
+image:
+  api: talkdrop/api:0.1.0
+  worker: talkdrop/worker:0.1.0
+  web: talkdrop/web:0.1.0
+
+replicaCount:
+  api: 2
+  worker: 1
+  web: 2
+
+env:
+  LIVEKIT_MOCK: 'false'
+  S3_MOCK: 'false'
+  BILLING_PROVIDER: mock
+  OTEL_EXPORTER_OTLP_ENDPOINT: ''
+
+ingress:
+  host: talkdrop.example.com
+  tls: true
+
+postgres:
+  # Prefer managed Postgres; this chart assumes an external DATABASE_URL secret.
+  existingSecret: talkdrop-db
+
+redis:
+  existingSecret: talkdrop-redis

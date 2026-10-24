@@ -12,6 +12,7 @@ import { createSocketHub } from './plugins/socket.js';
 import { createProviders } from './providers/index.js';
 import { createServices, registerRoutes } from './modules/routes.js';
 import { ServerEvents, type MatchFound } from '@talkdrop/shared';
+import { metrics } from './lib/metrics.js';
 
 export async function buildApp(config: AppConfig) {
   const app = Fastify({
@@ -52,9 +53,11 @@ export async function buildApp(config: AppConfig) {
       if (channel === MATCH_CHANNEL) {
         const data = payload as unknown as MatchFound & { userId: string };
         hub.emitToUser(data.userId, ServerEvents.MATCH_FOUND, data);
+        metrics.matches.inc();
       } else if (channel === CUT_CHANNEL) {
         const data = payload as { sessionId: string; reason: string; userMessage: string };
         hub.emitToSession(data.sessionId, ServerEvents.SESSION_CUT, data);
+        metrics.moderationCuts.inc({ source: 'server_or_client' });
       } else if (channel === SESSION_CHANNEL) {
         const data = payload as { sessionId: string; event: string; body: unknown };
         hub.emitToSession(data.sessionId, data.event, data.body);

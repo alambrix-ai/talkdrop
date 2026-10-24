@@ -155,6 +155,87 @@ export function createSocketHub(
         });
       });
     });
+
+    socket.on(
+      ClientEvents.ACTIVITY_START,
+      async (
+        payload: {
+          sessionId: string;
+          activity: 'would-you-rather' | 'trivia' | 'co-draw' | 'co-watch';
+        },
+        ack,
+      ) => {
+        try {
+          await services.sessions.getSummary(payload.sessionId, userId);
+          let round;
+          if (payload.activity === 'trivia') {
+            const t = services.activities.startTrivia();
+            const { _answer: _, ...pub } = t;
+            round = pub;
+          } else if (payload.activity === 'co-draw') {
+            round = services.activities.startCoDraw();
+          } else if (payload.activity === 'co-watch') {
+            round = services.activities.startCoWatch();
+          } else {
+            round = services.activities.startWouldYouRather();
+          }
+          const body = { sessionId: payload.sessionId, ...round };
+          nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.ACTIVITY_START, body);
+          void socket.join(`session:${payload.sessionId}`);
+          ack?.({ ok: true, ...body });
+        } catch (err) {
+          ack?.({ ok: false, error: err instanceof Error ? err.message : 'activity_failed' });
+        }
+      },
+    );
+
+    socket.on(
+      ClientEvents.ACTIVITY_UPDATE,
+      async (payload: { sessionId: string; choice: 'a' | 'b' }, ack) => {
+        const body = { sessionId: payload.sessionId, choice: payload.choice, userId };
+        nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.ACTIVITY_UPDATE, body);
+        ack?.({ ok: true });
+      },
+    );
+
+    socket.on(
+      ClientEvents.CAPTIONS_TOGGLE,
+      async (payload: { sessionId: string; enabled: boolean }, ack) => {
+        if (payload.enabled) {
+          const line = services.captions.nextLine(Date.now());
+          nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.CAPTION_LINE, {
+            sessionId: payload.sessionId,
+            ...line,
+          });
+        }
+        ack?.({ ok: true });
+      },
+    );
+
+    socket.on(
+      ClientEvents.AVATAR_CONSENT,
+      async (payload: { sessionId: string; consent: boolean }, ack) => {
+        nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.AVATAR_MODE, {
+          sessionId: payload.sessionId,
+          userId,
+          avatarOnly: !payload.consent,
+        });
+        ack?.({ ok: true });
+      },
+    );
+
+    socket.on(
+      ClientEvents.EFFECT_SET,
+      async (payload: { sessionId: string; effect: 'none' | 'warm' | 'mono' | 'soft' }, ack) => {
+        const body = {
+          sessionId: payload.sessionId,
+          effect: payload.effect,
+          userId,
+        };
+        nsp.to(`session:${payload.sessionId}`).emit(ServerEvents.EFFECT_SET, body);
+        ack?.({ ok: true, ...body });
+      },
+    );
   });
 
   return {

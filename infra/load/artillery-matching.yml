@@ -1,0 +1,28 @@
+# Talkdrop Phase 6 load smoke — Artillery (install: npm i -g artillery).
+# Target: API health + OTP + queue estimate under modest concurrency.
+# Full SPEC §16 (5k sockets / matcher p95 < 2s) needs a dedicated cluster.
+config:
+  target: 'http://localhost:4000'
+  phases:
+    - duration: 30
+      arrivalRate: 5
+      name: warm
+    - duration: 60
+      arrivalRate: 20
+      name: spike
+  defaults:
+    headers:
+      content-type: application/json
+scenarios:
+  - name: health_and_public
+    flow:
+      - get:
+          url: /health
+          expect:
+            - statusCode: 200
+      - get:
+          url: /health/ready
+      - get:
+          url: /metrics
+      - get:
+          url: /api/v1/public/stats

@@ -2,7 +2,7 @@
 
 Safe, beautiful, interest-first 1:1 video chat. Adults (18+) match by interests, mood, and language — with blur-first starts, AI icebreakers, and a visible safety stack.
 
-This monorepo implements the **MVP** from `docs/SPEC.md` (Phases 0–5). Product name is **Talkdrop** (specs originally said Meetglow).
+This monorepo implements SPEC §15 **Phases 0–7** (MVP + v1) from `docs/SPEC.md`. Product name is **Talkdrop** (specs originally said Meetglow).
 
 ## Stack (LOCKED)
 
@@ -76,6 +76,21 @@ OTP codes are printed by the mock SMS provider (and returned as `devCode` outsid
 | Mei      | +819012345678   | Connection + chat with Arjun   |
 | Priya S. | +919811122233   | Tenant admin                   |
 
+## Phase checklist (SPEC §15)
+
+| Phase | Status |
+|-------|--------|
+| 0 Foundation | Done |
+| 1 Identity & onboarding | Done |
+| 2 Matching & calls | Done (LiveKit mockable) |
+| 3 Safety v1 | Done |
+| 4 Social | Done |
+| 5 Admin console | Done (+ CSV export) |
+| 6 Hardening | Done (server mod tap, Playwright E2E, metrics, a11y, legal, i18n, Helm/TF, load/chaos smoke, security checklist) |
+| 7 v1 features | Done with mocks (captions/MT, activities+co-draw/co-watch stubs, rooms, avatar, effects, Plus filters/billing) |
+
+Blocked / mock-only until real vendors: LiveKit hidden subscriber (real SFU), STT/MT, Stripe/Razorpay signatures, full 5k-socket load, CSAM counsel path. See CHANGELOG mocks table.
+
 ## Scripts
 
 | Script            | Purpose                |
@@ -83,13 +98,14 @@ OTP codes are printed by the mock SMS provider (and returned as `devCode` outsid
 | `pnpm lint`       | ESLint all packages    |
 | `pnpm typecheck`  | `tsc --noEmit`         |
 | `pnpm test`       | Vitest unit tests      |
+| `pnpm --filter @talkdrop/web test:e2e` | Playwright SPEC §16 (API must be on :4000) |
 | `pnpm build`      | Build all packages/apps|
 
 ## Safety notes
 
-- Raw video/audio are **never** stored. Evidence is an encrypted snapshot of moderation events, TTL 24h.
-- MVP moderation samples client frames; **server-side LiveKit tap is required before public launch** (Phase 6).
-- CSAM/underage path is stubbed (`handleCsamSuspicion`) and must be completed with legal + T&S before launch.
+- Raw video/audio are **never** stored. Evidence is encrypted, TTL 24h.
+- Worker runs a **server-side moderation tap** (mock samples when `LIVEKIT_MOCK=true`).
+- CSAM/underage path is stubbed (`handleCsamSuspicion`) pending legal + T&S.
 
 ## Brand
 
