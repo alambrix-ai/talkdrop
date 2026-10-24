@@ -4,6 +4,8 @@ import { PrismaClient } from '@prisma/client';
 import Redis from 'ioredis';
 import { runMatchCycle } from './matcher.js';
 import { expireEvidence, recomputeTrust, updateStreaks } from './jobs.js';
+import { startModerationTap } from './moderation-tap.js';
+import { MockModerationProvider } from './mock-moderation.js';
 
 function loadEnvFile() {
   const candidates = [
@@ -44,7 +46,7 @@ const mockStorage = {
   },
 };
 
-console.info('Talkdrop worker starting (matcher + jobs)');
+console.info('Talkdrop worker starting (matcher + jobs + server-side mod tap)');
 
 setInterval(() => {
   void runMatchCycle({
@@ -56,6 +58,18 @@ setInterval(() => {
     blurFirstSeconds,
   }).catch((err) => console.error('[matcher]', err));
 }, matchInterval);
+
+const stopModTap = startModerationTap(
+  {
+    prisma,
+    redis,
+    moderation: new MockModerationProvider(),
+    nudityCut: Number(process.env.MOD_NUDITY_CUT ?? 0.85),
+    mock: livekitMock,
+  },
+  2000,
+  (msg) => console.info(msg),
+);
 
 setInterval(() => {
   void expireEvidence(prisma, mockStorage)
@@ -76,6 +90,7 @@ setInterval(() => {
 }, 6 * 60 * 60 * 1000);
 
 process.on('SIGINT', async () => {
+  stopModTap();
   await redis.quit();
   await prisma.$disconnect();
   process.exit(0);

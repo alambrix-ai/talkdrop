@@ -8,6 +8,7 @@ import { useAppStore } from '../../lib/store';
 export default function ProfilePage() {
   const me = useAppStore((s) => s.me);
   const setMe = useAppStore((s) => s.setMe);
+  const setToast = useAppStore((s) => s.setToast);
   const navigate = useNavigate();
   const [blurFirst, setBlurFirst] = useState(me?.profile.blurFirst ?? true);
   const [avatarFirst, setAvatarFirst] = useState(me?.profile.avatarFirst ?? false);
@@ -132,11 +133,76 @@ export default function ProfilePage() {
         <Card tone="cream" style={{ padding: 24 }}>
           <h2 className="h3">Talkdrop Plus</h2>
           <p className="mute" style={{ marginTop: 8 }}>
-            399 INR / month · HD video, region filters, live translation, priority matching
+            399 INR / month · HD video, region & language filters, live translation, priority
+            matching. Current plan: <strong>{me.plan}</strong>
           </p>
-          <Button style={{ marginTop: 16 }} onClick={() => void api('/billing/checkout', { method: 'POST' })}>
-            Upgrade
-          </Button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
+            <Button
+              onClick={() =>
+                void api<{ message?: string }>('/billing/checkout', {
+                  method: 'POST',
+                  json: { provider: 'mock' },
+                }).then(async (r) => {
+                  setToast(r.message ?? 'Plus activated');
+                  const next = await api('/me');
+                  setMe(next as never);
+                })
+              }
+            >
+              {me.plan === 'plus' ? 'Renew (mock)' : 'Upgrade (mock)'}
+            </Button>
+            {me.plan === 'plus' ? (
+              <Button
+                variant="ghost"
+                onClick={() =>
+                  void api('/me/filters', {
+                    method: 'PUT',
+                    json: { regions: ['global', 'asia'], languages: ['en', 'hi'] },
+                  }).then(() => setToast('Plus match filters saved'))
+                }
+              >
+                Save Plus filters
+              </Button>
+            ) : null}
+          </div>
+        </Card>
+
+        <Card style={{ padding: 24 }}>
+          <h2 className="h3">Your data</h2>
+          <p className="mute" style={{ marginTop: 8 }}>
+            Export or delete personal data (GDPR/DPDP).
+          </p>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                void api('/me/data').then((data) => {
+                  const blob = new Blob([JSON.stringify(data, null, 2)], {
+                    type: 'application/json',
+                  });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'talkdrop-data-export.json';
+                  a.click();
+                })
+              }
+            >
+              Export my data
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => {
+                if (confirm('Delete your Talkdrop account data?')) {
+                  void api('/me/data', { method: 'DELETE' }).then(() => void signOut());
+                }
+              }}
+            >
+              Delete my data
+            </Button>
+          </div>
         </Card>
       </div>
       <style>{`

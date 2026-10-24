@@ -30,6 +30,13 @@ import { ReportsService } from './reports/reports.service.js';
 import { ModerationService } from './moderation/moderation.service.js';
 import { AdminService } from './admin/admin.service.js';
 import { MatchingGateway } from './matching/matching.gateway.js';
+import { BillingService } from './billing/billing.service.js';
+import { RoomsService } from './rooms/rooms.service.js';
+import { ActivitiesService } from './activities/activities.service.js';
+import { CaptionsService } from './captions/captions.service.js';
+import { PrivacyService } from './privacy/privacy.service.js';
+import { metrics, renderMetrics } from '../lib/metrics.js';
+import { z } from 'zod';
 
 const REFRESH_COOKIE = 'td_refresh';
 
@@ -43,6 +50,11 @@ export interface Services {
   moderation: ModerationService;
   admin: AdminService;
   matching: MatchingGateway;
+  billing: BillingService;
+  rooms: RoomsService;
+  activities: ActivitiesService;
+  captions: CaptionsService;
+  privacy: PrivacyService;
 }
 
 export function createServices(config: AppConfig, providers: Providers): Services {
@@ -58,6 +70,11 @@ export function createServices(config: AppConfig, providers: Providers): Service
     moderation: new ModerationService(config, providers, sessions),
     admin: new AdminService(reports, providers),
     matching: new MatchingGateway(),
+    billing: new BillingService(),
+    rooms: new RoomsService(),
+    activities: new ActivitiesService(),
+    captions: new CaptionsService(),
+    privacy: new PrivacyService(),
   };
 }
 
@@ -87,7 +104,21 @@ export async function registerRoutes(
     reply.status(statusCode).send(body);
   });
 
+  app.addHook('onResponse', async (req, reply) => {
+    metrics.httpRequests.inc({
+      method: req.method,
+      status: String(reply.statusCode),
+    });
+  });
+
   app.get('/health', async () => ({ ok: true, service: 'talkdrop-api' }));
+  app.get('/health/ready', async () => {
+    await prisma.$queryRaw`SELECT 1`;
+    return { ok: true, db: true, redis: true };
+  });
+  app.get('/metrics', async (_req, reply) => {
+    reply.type('text/plain').send(renderMetrics());
+  });
 
   // Auth
   app.post('/api/v1/auth/otp/request', async (req) => {
@@ -308,12 +339,109 @@ export async function registerRoutes(
     return { id: Number(row.id), status: row.status };
   });
 
-  // Billing stubs
-  app.post('/api/v1/billing/checkout', { preHandler: [app.authenticate] }, async () => {
-    return { url: null, message: 'Talkdrop Plus billing coming in v1' };
+  // Billing (Talkdrop Plus — mock adapter in dev)
+  app.post('/api/v1/billing/checkout', { preHandler: [app.authenticate] }, async (req) => {
+    const body = z
+      .object({ provider: z.enum(['stripe', 'razorpay', 'mock']).default('mock') })
+      .parse(req.body ?? {});
+    return services.billing.checkout(req.user!.id, body.provider);
   });
 
-  app.post('/api/v1/billing/webhook', async () => ({ received: true }));
+  app.post('/api/v1/billing/webhook', async (req) => {
+    const body = z
+      .object({
+        provider: z.string(),
+        event: z.string(),
+        userId: z.string().uuid().optional(),
+        providerRef: z.string().optional(),
+      })
+      .parse(req.body);
+    return services.billing.handleWebhook(body);
+  });
+
+  app.get('/api/v1/billing/status', { preHandler: [app.authenticate] }, async (req) => {
+    return services.billing.status(req.user!.id);
+  });
+
+  // Rooms / group roulette
+  app.get('/api/v1/rooms', { preHandler: [app.authenticateVerified] }, async () => {
+    return services.rooms.list();
+  });
+
+  app.post('/api/v1/rooms/:id/join', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const { id } = req.params as { id: string };
+    return services.rooms.join(id, req.user!.id, providers);
+  });
+
+  // Activities
+  app.post(
+    '/api/v1/sessions/:id/activities/start',
+    { preHandler: [app.authenticateVerified] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const body = z
+        .object({
+          activity: z.enum(['would-you-rather', 'trivia', 'co-draw', 'co-watch']),
+        })
+        .parse(req.body);
+      await services.sessions.getSummary(id, req.user!.id);
+      if (body.activity === 'trivia') {
+        const round = services.activities.startTrivia();
+        const { _answer: _, ...publicRound } = round;
+        return { sessionId: id, ...publicRound };
+      }
+      if (body.activity === 'co-draw') {
+        return { sessionId: id, ...services.activities.startCoDraw() };
+      }
+      if (body.activity === 'co-watch') {
+        return { sessionId: id, ...services.activities.startCoWatch() };
+      }
+      return { sessionId: id, ...services.activities.startWouldYouRather() };
+    },
+  );
+
+  // Captions sample (client polls or socket pushes)
+  app.get(
+    '/api/v1/sessions/:id/captions/next',
+    { preHandler: [app.authenticateVerified] },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      const me = await services.users.getMe(req.user!.id);
+      await services.sessions.getSummary(id, req.user!.id);
+      const tick = Number((req.query as { tick?: string }).tick ?? Date.now());
+      const translateTo =
+        me.plan === 'plus' ? me.profile.translateTo ?? 'en' : me.profile.captions ? null : null;
+      return {
+        sessionId: id,
+        ...services.captions.nextLine(tick, me.plan === 'plus' ? translateTo ?? 'en' : null),
+      };
+    },
+  );
+
+  // Privacy / GDPR
+  app.get('/api/v1/me/data', { preHandler: [app.authenticate] }, async (req) => {
+    return services.privacy.exportData(req.user!.id);
+  });
+
+  app.delete('/api/v1/me/data', { preHandler: [app.authenticate] }, async (req) => {
+    return services.privacy.deleteData(req.user!.id);
+  });
+
+  // Match filters (Plus)
+  app.put('/api/v1/me/filters', { preHandler: [app.authenticateVerified] }, async (req) => {
+    const me = await services.users.getMe(req.user!.id);
+    services.billing.assertPlus(me.plan);
+    const body = z
+      .object({
+        regions: z.array(z.string()).optional(),
+        languages: z.array(z.string()).optional(),
+      })
+      .parse(req.body);
+    // Persist lightly on profile via region/languages preference JSON in bio meta — use redis for MVP
+    const { getRedis } = await import('../lib/redis.js');
+    await getRedis().set(`filters:${req.user!.id}`, JSON.stringify(body), 'EX', 86400 * 30);
+    return { ok: true, filters: body };
+  });
 
   // Admin
   app.get('/api/v1/admin/overview', { preHandler: [app.authenticate] }, async (req) => {
@@ -342,6 +470,26 @@ export async function registerRoutes(
 
   app.get('/api/v1/admin/audit', { preHandler: [app.authenticate] }, async (req) => {
     return services.admin.audit(req.user!.id);
+  });
+
+  app.get('/api/v1/admin/export.csv', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const overview = await services.admin.overview(req.user!.id);
+    const reports = await services.admin.listReports(req.user!.id);
+    const lines = [
+      'metric,value',
+      `active_now,${overview.kpis.activeNow}`,
+      `calls_today,${overview.kpis.callsToday}`,
+      `avg_call_sec,${overview.kpis.averageCallLengthSec}`,
+      `reports_per_1000,${overview.kpis.reportsPer1000}`,
+      '',
+      'report_id,category,severity,status,waiting_minutes',
+      ...reports.map(
+        (r) => `${r.id},${r.category},${r.severity},${r.status},${r.waitingMinutes}`,
+      ),
+    ];
+    reply.header('content-type', 'text/csv; charset=utf-8');
+    reply.header('content-disposition', 'attachment; filename="talkdrop-admin-export.csv"');
+    return lines.join('\n');
   });
 
   app.get('/api/v1/admin/policy', { preHandler: [app.authenticate] }, async (req) => {
