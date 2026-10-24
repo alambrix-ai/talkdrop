@@ -39,21 +39,24 @@ jobs:
       JWT_ACCESS_SECRET: ci-access-secret-min-32-characters
       JWT_REFRESH_SECRET: ci-refresh-secret-min-32-characters
       TRUST_TOKEN_SECRET: ci-trust-secret-min-32-characters
-      FIELD_ENCRYPTION_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      FIELD_ENCRYPTION_KEY: dGFsa2Ryb3AtZGV2LWZpZWxkLWtleS0zMmJ5dGVzISE=
+      INTERNAL_WEBHOOK_SECRET: ci-webhook-secret-min-16
       LIVEKIT_MOCK: 'true'
       S3_MOCK: 'true'
       SMS_PROVIDER: mock
       AGE_PROVIDER: mock
       MODERATION_PROVIDER: mock
+      OTP_RETURN_DEV_CODE: 'true'
       WEB_ORIGIN: http://localhost:5173
       API_ORIGIN: http://localhost:4000
+
 
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # version comes from package.json packageManager (avoid dual version conflict)
       - uses: actions/setup-node@v4
+
         with:
           node-version: 20
           cache: pnpm

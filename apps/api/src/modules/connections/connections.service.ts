@@ -144,21 +144,16 @@ export class ConnectionsService {
     const room = session.id;
     await prisma.session.update({ where: { id: session.id }, data: { livekitRoom: room } });
     await providers.livekit.createRoom(room);
+    // Only mint the caller's token — peer fetches their own via GET /sessions/:id (participant-gated).
     const token = await providers.livekit.createToken({
       roomName: room,
       identity: userId,
       name: 'You',
     });
-    const peerToken = await providers.livekit.createToken({
-      roomName: room,
-      identity: peerId,
-      name: c.peer.displayName ?? 'Friend',
-    });
     return {
       sessionId: session.id,
       peerId,
       livekit: token,
-      peerLivekit: peerToken,
       blurUntilMs: Date.now() + blurSeconds * 1000,
     };
   }

@@ -102,6 +102,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error(`Invalid environment: ${msg}`);
   }
   assertProductionSecrets(parsed.data);
+  if (parsed.data.NODE_ENV === 'production') {
+    if (parsed.data.LIVEKIT_MOCK) {
+      throw new Error('LIVEKIT_MOCK=true is not allowed in production');
+    }
+    if (parsed.data.AGE_PROVIDER === 'mock') {
+      throw new Error('AGE_PROVIDER=mock is not allowed in production');
+    }
+  }
   if (env === process.env) cached = parsed.data;
   return parsed.data;
 }

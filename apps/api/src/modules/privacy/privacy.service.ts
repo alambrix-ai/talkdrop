@@ -41,7 +41,7 @@ export class PrivacyService {
         body: m.body,
         createdAt: m.createdAt.toISOString(),
       })),
-      note: 'Phone numbers are not exported in cleartext. Face/media are never stored.',
+      note: 'Phone numbers are not exported in cleartext. Face/media are never stored. Enforcement/report rows may be retained under legal hold.',
     };
   }
 
@@ -60,9 +60,13 @@ export class PrivacyService {
         data: { revokedAt: new Date() },
       }),
       prisma.device.deleteMany({ where: { userId } }),
-      ...(otpOr.length
-        ? [prisma.authOtp.deleteMany({ where: { OR: otpOr } })]
-        : []),
+      ...(otpOr.length ? [prisma.authOtp.deleteMany({ where: { OR: otpOr } })] : []),
+      prisma.verification.deleteMany({ where: { userId } }),
+      prisma.vibeCheck.deleteMany({ where: { OR: [{ fromUser: userId }, { aboutUser: userId }] } }),
+      prisma.subscription.updateMany({
+        where: { userId, status: 'active' },
+        data: { status: 'cancelled' },
+      }),
       prisma.userInterest.deleteMany({ where: { userId } }),
       prisma.userProfile.deleteMany({ where: { userId } }),
       prisma.message.deleteMany({ where: { senderId: userId } }),
@@ -74,11 +78,17 @@ export class PrivacyService {
           phoneHash: null,
           email: null,
           avatarUrl: null,
+          birthYearRange: null,
+          region: null,
+          country: null,
+          timezone: null,
+          plan: 'free',
           status: 'banned',
           ageVerified: false,
         },
       }),
     ]);
-    return { deleted: true };
+    // Reports/enforcements/appeals retained for safety/legal hold (anonymized actor already)
+    return { deleted: true, retained: ['reports', 'enforcements', 'appeals', 'session_participations'] };
   }
 }

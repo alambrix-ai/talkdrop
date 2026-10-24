@@ -61,9 +61,15 @@ export class AuthService {
       },
     });
     await this.providers.sms.sendOtp(phoneE164, code);
+    // Never in production. Local/CI: development, test, or explicit OTP_RETURN_DEV_CODE.
+    const returnDevCode =
+      this.config.NODE_ENV !== 'production' &&
+      (this.config.NODE_ENV === 'development' ||
+        this.config.NODE_ENV === 'test' ||
+        process.env.OTP_RETURN_DEV_CODE === 'true');
     return {
       sent: true,
-      ...(this.config.NODE_ENV !== 'production' ? { devCode: code } : {}),
+      ...(returnDevCode ? { devCode: code } : {}),
     };
   }
 

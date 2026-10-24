@@ -85,13 +85,8 @@ export default function VerifyPage() {
         setPhase('passed');
         const me = await api('/me');
         setMe(me as never);
-      } else if (res.result === 'uncertain') {
-        await api('/verification/fallback/complete', {
-          method: 'POST',
-          json: { method: 'phone', providerRef: 'mock-pass' },
-        });
-        setPhase('passed');
       } else {
+        // Uncertain/failed → show fallback UI (server rejects unsigned pass in production)
         setPhase('failed');
       }
     } catch (e) {
@@ -218,17 +213,41 @@ export default function VerifyPage() {
                 <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>
                   <Button
                     onClick={() =>
-                      void api('/verification/fallback/complete', {
-                        method: 'POST',
-                        json: { method: 'phone', providerRef: 'mock' },
-                      }).then(() => {
+                      void (async () => {
+                        const start = await api<{ pendingRef?: string }>(
+                          '/verification/fallback/start',
+                          { method: 'POST', json: { method: 'phone' } },
+                        );
+                        await api('/verification/fallback/complete', {
+                          method: 'POST',
+                          json: {
+                            method: 'phone',
+                            providerRef: start.pendingRef ?? 'mock',
+                          },
+                        });
                         setPhase('passed');
-                      })
+                        const me = await api('/me');
+                        setMe(me as never);
+                      })().catch((e) =>
+                        setError(e instanceof Error ? e.message : 'Fallback failed'),
+                      )
                     }
                   >
                     Phone number code
                   </Button>
-                  <Button variant="ghost">ID document</Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                      void api<{ redirectUrl?: string }>('/verification/fallback/start', {
+                        method: 'POST',
+                        json: { method: 'document' },
+                      }).then((r) => {
+                        if (r.redirectUrl) window.location.href = r.redirectUrl;
+                      })
+                    }
+                  >
+                    ID document
+                  </Button>
                 </div>
               ) : null}
               <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>

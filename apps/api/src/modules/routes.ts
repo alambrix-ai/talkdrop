@@ -409,9 +409,15 @@ export async function registerRoutes(
     };
   });
 
-  // Appeals
+  // Appeals — only against the caller's own enforcements
   app.post('/api/v1/appeals', { preHandler: [app.authenticate] }, async (req) => {
     const body = parse(createAppealSchema, req.body);
+    const enforcement = await prisma.enforcement.findUnique({
+      where: { id: BigInt(body.enforcementId) },
+    });
+    if (!enforcement || enforcement.userId !== req.user!.id) {
+      throw new AppError('forbidden', 'Cannot appeal this enforcement', 403);
+    }
     const row = await prisma.appeal.create({
       data: {
         enforcementId: BigInt(body.enforcementId),
