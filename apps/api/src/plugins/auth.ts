@@ -9,6 +9,7 @@ export interface AuthUser {
   ageVerified: boolean;
   trustTier: string;
   status: string;
+  tenantId: string | null;
 }
 
 declare module 'fastify' {
@@ -18,6 +19,7 @@ declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (req: FastifyRequest) => Promise<void>;
     authenticateVerified: (req: FastifyRequest) => Promise<void>;
+    authenticateAdmin: (req: FastifyRequest) => Promise<void>;
   }
 }
 
@@ -38,6 +40,7 @@ async function resolveUser(req: FastifyRequest, config: AppConfig): Promise<Auth
     ageVerified: user.ageVerified,
     trustTier: user.trustTier,
     status: user.status,
+    tenantId: user.tenantId,
   };
 }
 
@@ -53,5 +56,16 @@ export async function registerAuth(app: FastifyInstance, config: AppConfig): Pro
     if (req.user.status === 'suspended') {
       throw new AppError('suspended', 'Account suspended', 403);
     }
+  });
+  app.decorate('authenticateAdmin', async (req: FastifyRequest) => {
+    req.user = await resolveUser(req, config);
+    if (req.user.status === 'suspended') {
+      throw new AppError('suspended', 'Account suspended', 403);
+    }
+    const member = await prisma.tenantMember.findFirst({ where: { userId: req.user.id } });
+    if (!member) {
+      throw new AppError('forbidden', 'Admin access required', 403);
+    }
+    req.user.tenantId = member.tenantId;
   });
 }

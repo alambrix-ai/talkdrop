@@ -37,7 +37,8 @@ async function completeOnboarding(request: APIRequestContext, token: string) {
 
 async function injectAuth(page: Page, token: string) {
   await page.addInitScript((t) => {
-    localStorage.setItem('td_access', t);
+    // Memory-only access token bootstrap (no localStorage)
+    (window as unknown as { __TD_BOOTSTRAP_TOKEN__?: string }).__TD_BOOTSTRAP_TOKEN__ = t;
   }, token);
 }
 

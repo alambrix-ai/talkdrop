@@ -18,20 +18,47 @@ export async function buildApp(config: AppConfig) {
   const app = Fastify({
     logger: {
       level: config.NODE_ENV === 'test' ? 'silent' : 'info',
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'body.phoneE164',
+          'body.code',
+          'body.password',
+        ],
+        remove: true,
+      },
     },
   });
 
   await ensureRedis();
 
   await app.register(cors, {
-    origin: config.WEB_ORIGIN,
+    origin: config.NODE_ENV === 'production' ? config.WEB_ORIGIN : true,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Talkdrop-Webhook-Secret'],
   });
   await app.register(cookie);
-  await app.register(helmet, { global: true, contentSecurityPolicy: false });
-  await app.register(multipart, { limits: { fileSize: 512_000 } });
+  await app.register(helmet, {
+    global: true,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'same-site' },
+    referrerPolicy: { policy: 'no-referrer' },
+  });
+  await app.register(multipart, {
+    limits: { fileSize: 512_000, files: 1 },
+  });
   await app.register(rateLimit, {
-    max: 300,
+    global: true,
+    max: config.NODE_ENV === 'production' ? 120 : 300,
     timeWindow: '1 minute',
   });
 

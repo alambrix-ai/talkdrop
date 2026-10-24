@@ -1,11 +1,31 @@
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
 
-let accessToken: string | null = localStorage.getItem('td_access');
+/** In-memory access JWT only — never persist to localStorage (XSS blast radius). */
+let accessToken: string | null = null;
+
+// E2E / bootstrap: one-shot token from page init script
+declare global {
+  interface Window {
+    __TD_BOOTSTRAP_TOKEN__?: string;
+  }
+}
+if (typeof window !== 'undefined' && window.__TD_BOOTSTRAP_TOKEN__) {
+  accessToken = window.__TD_BOOTSTRAP_TOKEN__;
+  delete window.__TD_BOOTSTRAP_TOKEN__;
+}
+try {
+  localStorage.removeItem('td_access');
+} catch {
+  /* ignore */
+}
 
 export function setAccessToken(token: string | null) {
   accessToken = token;
-  if (token) localStorage.setItem('td_access', token);
-  else localStorage.removeItem('td_access');
+  try {
+    localStorage.removeItem('td_access');
+  } catch {
+    /* ignore */
+  }
 }
 
 export function getAccessToken() {
@@ -20,6 +40,13 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+let refreshInFlight: Promise<boolean> | null = null;
+
+export async function ensureSession(): Promise<boolean> {
+  if (accessToken) return true;
+  return tryRefresh();
 }
 
 export async function api<T>(
@@ -58,22 +85,28 @@ export async function api<T>(
 }
 
 async function tryRefresh(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_URL}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (!res.ok) {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        setAccessToken(null);
+        return false;
+      }
+      const data = (await res.json()) as { accessToken: string };
+      setAccessToken(data.accessToken);
+      return true;
+    } catch {
       setAccessToken(null);
       return false;
+    } finally {
+      refreshInFlight = null;
     }
-    const data = (await res.json()) as { accessToken: string };
-    setAccessToken(data.accessToken);
-    return true;
-  } catch {
-    setAccessToken(null);
-    return false;
-  }
+  })();
+  return refreshInFlight;
 }
 
 export async function apiForm<T>(path: string, form: FormData): Promise<T> {

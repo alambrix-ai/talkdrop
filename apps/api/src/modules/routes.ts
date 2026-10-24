@@ -20,7 +20,7 @@ import {
 import type { AppConfig } from '../config.js';
 import { AppError, toErrorPayload } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
-import { sha256 } from '../lib/crypto.js';
+import { safeEqual, sha256 } from '../lib/crypto.js';
 import type { Providers } from '../providers/index.js';
 import { AuthService } from './auth/auth.service.js';
 import { UsersService } from './users/users.service.js';
@@ -40,6 +40,56 @@ import { metrics, renderMetrics } from '../lib/metrics.js';
 import { z } from 'zod';
 
 const REFRESH_COOKIE = 'td_refresh';
+
+const FRAME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/octet-stream']);
+const AUDIO_TYPES = new Set([
+  'audio/webm',
+  'audio/wav',
+  'audio/mpeg',
+  'audio/ogg',
+  'application/octet-stream',
+]);
+
+function headerValue(headers: Record<string, unknown>, name: string): string {
+  const raw = headers[name];
+  if (Array.isArray(raw)) return String(raw[0] ?? '');
+  return raw == null ? '' : String(raw);
+}
+
+function assertWebhookSecret(
+  req: { headers: Record<string, unknown> },
+  config: AppConfig,
+): void {
+  const expected = config.INTERNAL_WEBHOOK_SECRET;
+  if (!expected) {
+    if (config.NODE_ENV === 'production') {
+      throw new AppError('misconfigured', 'INTERNAL_WEBHOOK_SECRET required', 503);
+    }
+    return;
+  }
+  const got = headerValue(req.headers, 'x-talkdrop-webhook-secret');
+  if (!got || !safeEqual(got, expected)) {
+    throw new AppError('unauthorized', 'Invalid webhook secret', 401);
+  }
+}
+
+function assertCookieOrigin(req: { headers: Record<string, unknown> }, config: AppConfig): void {
+  const origin = headerValue(req.headers, 'origin');
+  const referer = headerValue(req.headers, 'referer');
+  if (!origin && !referer) {
+    if (config.NODE_ENV === 'production') {
+      throw new AppError('forbidden', 'Missing Origin', 403);
+    }
+    return;
+  }
+  const allowed = config.WEB_ORIGIN;
+  if (origin && origin !== allowed) {
+    throw new AppError('forbidden', 'Invalid Origin', 403);
+  }
+  if (!origin && referer && !referer.startsWith(allowed)) {
+    throw new AppError('forbidden', 'Invalid Referer', 403);
+  }
+}
 
 export interface Services {
   auth: AuthService;
@@ -96,7 +146,7 @@ export async function registerRoutes(
   const cookieOpts = {
     path: '/',
     httpOnly: true,
-    sameSite: 'lax' as const,
+    sameSite: (config.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
     secure: config.NODE_ENV === 'production',
   };
 
@@ -121,31 +171,48 @@ export async function registerRoutes(
     reply.type('text/plain').send(renderMetrics());
   });
 
-  // Auth
-  app.post('/api/v1/auth/otp/request', async (req) => {
-    const body = parse(otpRequestSchema, req.body);
-    return services.auth.requestOtp(body.phoneE164);
-  });
+  // Auth — stricter per-route rate limits
+  app.post(
+    '/api/v1/auth/otp/request',
+    {
+      config: {
+        rateLimit: { max: 5, timeWindow: '1 minute' },
+      },
+    },
+    async (req) => {
+      const body = parse(otpRequestSchema, req.body);
+      return services.auth.requestOtp(body.phoneE164);
+    },
+  );
 
-  app.post('/api/v1/auth/otp/verify', async (req, reply) => {
-    const body = parse(otpVerifySchema, req.body);
-    const result = await services.auth.verifyOtp({
-      ...body,
-      userAgent: req.headers['user-agent'],
-      ipHash: sha256(req.ip),
-    });
-    reply.setCookie(REFRESH_COOKIE, result.refreshToken, {
-      ...cookieOpts,
-      expires: result.refreshExpiresAt,
-    });
-    return {
-      accessToken: result.accessToken,
-      trustToken: result.trustToken,
-      user: result.user,
-    };
-  });
+  app.post(
+    '/api/v1/auth/otp/verify',
+    {
+      config: {
+        rateLimit: { max: 10, timeWindow: '1 minute' },
+      },
+    },
+    async (req, reply) => {
+      const body = parse(otpVerifySchema, req.body);
+      const result = await services.auth.verifyOtp({
+        ...body,
+        userAgent: req.headers['user-agent'],
+        ipHash: sha256(req.ip),
+      });
+      reply.setCookie(REFRESH_COOKIE, result.refreshToken, {
+        ...cookieOpts,
+        expires: result.refreshExpiresAt,
+      });
+      return {
+        accessToken: result.accessToken,
+        trustToken: result.trustToken,
+        user: result.user,
+      };
+    },
+  );
 
   app.post('/api/v1/auth/refresh', async (req, reply) => {
+    assertCookieOrigin(req, config);
     const raw = req.cookies[REFRESH_COOKIE];
     if (!raw) throw new AppError('unauthorized', 'No refresh cookie', 401);
     const result = await services.auth.refresh(raw);
@@ -157,6 +224,7 @@ export async function registerRoutes(
   });
 
   app.post('/api/v1/auth/logout', async (req, reply) => {
+    assertCookieOrigin(req, config);
     await services.auth.logout(req.cookies[REFRESH_COOKIE]);
     reply.clearCookie(REFRESH_COOKIE, { path: '/' });
     return { ok: true };
@@ -248,16 +316,27 @@ export async function registerRoutes(
       const { id } = req.params as { id: string };
       const file = await req.file();
       if (!file) throw new AppError('validation_error', 'Frame required', 400);
+      const mime = file.mimetype?.split(';')[0]?.trim() ?? '';
+      if (mime && !FRAME_TYPES.has(mime)) {
+        throw new AppError('validation_error', 'Unsupported frame type', 400);
+      }
       const buf = await file.toBuffer();
       return services.moderation.scanFrame(id, req.user!.id, buf);
     },
   );
 
   // Reports / blocks
-  app.post('/api/v1/reports', { preHandler: [app.authenticateVerified] }, async (req) => {
-    const body = parse(createReportSchema, req.body);
-    return services.reports.create(req.user!.id, body);
-  });
+  app.post(
+    '/api/v1/reports',
+    {
+      preHandler: [app.authenticateVerified],
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (req) => {
+      const body = parse(createReportSchema, req.body);
+      return services.reports.create(req.user!.id, body);
+    },
+  );
 
   app.post('/api/v1/blocks', { preHandler: [app.authenticateVerified] }, async (req) => {
     const body = parse(createBlockSchema, req.body);
@@ -299,7 +378,10 @@ export async function registerRoutes(
 
   app.post(
     '/api/v1/connections/:id/messages',
-    { preHandler: [app.authenticateVerified] },
+    {
+      preHandler: [app.authenticateVerified],
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    },
     async (req) => {
       const { id } = req.params as { id: string };
       const body = parse(sendMessageSchema, req.body);
@@ -327,9 +409,15 @@ export async function registerRoutes(
     };
   });
 
-  // Appeals
+  // Appeals — only against the caller's own enforcements
   app.post('/api/v1/appeals', { preHandler: [app.authenticate] }, async (req) => {
     const body = parse(createAppealSchema, req.body);
+    const enforcement = await prisma.enforcement.findUnique({
+      where: { id: BigInt(body.enforcementId) },
+    });
+    if (!enforcement || enforcement.userId !== req.user!.id) {
+      throw new AppError('forbidden', 'Cannot appeal this enforcement', 403);
+    }
     const row = await prisma.appeal.create({
       data: {
         enforcementId: BigInt(body.enforcementId),
@@ -349,6 +437,8 @@ export async function registerRoutes(
   });
 
   app.post('/api/v1/billing/webhook', async (req) => {
+    // Billing stays mock; still require shared secret so plan flips are not world-writable
+    assertWebhookSecret(req, config);
     const body = z
       .object({
         provider: z.string(),
@@ -428,6 +518,10 @@ export async function registerRoutes(
       await services.sessions.getSummary(id, req.user!.id);
       const file = await req.file();
       if (!file) throw new AppError('validation_error', 'Audio chunk required', 400);
+      const mime = file.mimetype?.split(';')[0]?.trim() ?? '';
+      if (mime && !AUDIO_TYPES.has(mime)) {
+        throw new AppError('validation_error', 'Unsupported audio type', 400);
+      }
       const buf = await file.toBuffer();
       const locale =
         (req.query as { locale?: string }).locale ?? me.profile.languages?.[0] ?? 'en';
@@ -474,24 +568,24 @@ export async function registerRoutes(
     return { ok: true, filters: updated.matchFilters ?? {} };
   });
 
-  // Admin
-  app.get('/api/v1/admin/overview', { preHandler: [app.authenticate] }, async (req) => {
+  // Admin — authenticateAdmin gate before service-layer RBAC
+  app.get('/api/v1/admin/overview', { preHandler: [app.authenticateAdmin] }, async (req) => {
     return services.admin.overview(req.user!.id);
   });
 
-  app.get('/api/v1/admin/reports', { preHandler: [app.authenticate] }, async (req) => {
+  app.get('/api/v1/admin/reports', { preHandler: [app.authenticateAdmin] }, async (req) => {
     const q = req.query as { status?: string };
     return services.admin.listReports(req.user!.id, q.status);
   });
 
-  app.get('/api/v1/admin/reports/:id', { preHandler: [app.authenticate] }, async (req) => {
+  app.get('/api/v1/admin/reports/:id', { preHandler: [app.authenticateAdmin] }, async (req) => {
     const { id } = req.params as { id: string };
     return services.admin.getReport(req.user!.id, Number(id));
   });
 
   app.post(
     '/api/v1/admin/reports/:id/decision',
-    { preHandler: [app.authenticate] },
+    { preHandler: [app.authenticateAdmin] },
     async (req) => {
       const { id } = req.params as { id: string };
       const body = parse(adminDecisionSchema, req.body);
@@ -499,46 +593,53 @@ export async function registerRoutes(
     },
   );
 
-  app.get('/api/v1/admin/audit', { preHandler: [app.authenticate] }, async (req) => {
+  app.get('/api/v1/admin/audit', { preHandler: [app.authenticateAdmin] }, async (req) => {
     return services.admin.audit(req.user!.id);
   });
 
-  app.get('/api/v1/admin/export.csv', { preHandler: [app.authenticate] }, async (req, reply) => {
-    const overview = await services.admin.overview(req.user!.id);
-    const reports = await services.admin.listReports(req.user!.id);
-    const lines = [
-      'metric,value',
-      `active_now,${overview.kpis.activeNow}`,
-      `calls_today,${overview.kpis.callsToday}`,
-      `avg_call_sec,${overview.kpis.averageCallLengthSec}`,
-      `reports_per_1000,${overview.kpis.reportsPer1000}`,
-      '',
-      'report_id,category,severity,status,waiting_minutes',
-      ...reports.map(
-        (r) => `${r.id},${r.category},${r.severity},${r.status},${r.waitingMinutes}`,
-      ),
-    ];
-    reply.header('content-type', 'text/csv; charset=utf-8');
-    reply.header('content-disposition', 'attachment; filename="talkdrop-admin-export.csv"');
-    return lines.join('\n');
-  });
+  app.get(
+    '/api/v1/admin/export.csv',
+    { preHandler: [app.authenticateAdmin] },
+    async (req, reply) => {
+      const overview = await services.admin.overview(req.user!.id);
+      const reports = await services.admin.listReports(req.user!.id);
+      const lines = [
+        'metric,value',
+        `active_now,${overview.kpis.activeNow}`,
+        `calls_today,${overview.kpis.callsToday}`,
+        `avg_call_sec,${overview.kpis.averageCallLengthSec}`,
+        `reports_per_1000,${overview.kpis.reportsPer1000}`,
+        '',
+        'report_id,category,severity,status,waiting_minutes',
+        ...reports.map(
+          (r) => `${r.id},${r.category},${r.severity},${r.status},${r.waitingMinutes}`,
+        ),
+      ];
+      reply.header('content-type', 'text/csv; charset=utf-8');
+      reply.header('content-disposition', 'attachment; filename="talkdrop-admin-export.csv"');
+      return lines.join('\n');
+    },
+  );
 
-  app.get('/api/v1/admin/policy', { preHandler: [app.authenticate] }, async (req) => {
+  app.get('/api/v1/admin/policy', { preHandler: [app.authenticateAdmin] }, async (req) => {
     return services.admin.getPolicy(req.user!.id);
   });
 
-  app.patch('/api/v1/admin/policy', { preHandler: [app.authenticate] }, async (req) => {
+  app.patch('/api/v1/admin/policy', { preHandler: [app.authenticateAdmin] }, async (req) => {
     const body = parse(adminPolicySchema, req.body);
     return services.admin.patchPolicy(req.user!.id, body);
   });
 
-  // Internal LiveKit webhook (signature verification stub for mock)
+  // Internal LiveKit webhook — requires shared secret (not classic LiveKit JWT verify yet)
   app.post('/internal/livekit/webhook', async (req) => {
-    const body = req.body as {
-      event?: string;
-      room?: { name?: string };
-      participant?: { identity?: string };
-    };
+    assertWebhookSecret(req, config);
+    const body = z
+      .object({
+        event: z.string().optional(),
+        room: z.object({ name: z.string().optional() }).optional(),
+        participant: z.object({ identity: z.string().optional() }).optional(),
+      })
+      .parse(req.body ?? {});
     if (body.event === 'room_finished' && body.room?.name) {
       await prisma.session.updateMany({
         where: { livekitRoom: body.room.name, status: { in: ['live', 'connecting'] } },

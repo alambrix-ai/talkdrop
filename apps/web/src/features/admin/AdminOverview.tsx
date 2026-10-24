@@ -44,19 +44,24 @@ export default function AdminOverview() {
         <Button
           variant="ghost"
           onClick={() => {
-            const token = localStorage.getItem('td_access');
-            void fetch(
-              `${import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1'}/admin/export.csv`,
-              { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: 'include' },
-            )
-              .then((r) => r.blob())
-              .then((blob) => {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'talkdrop-admin-export.csv';
-                a.click();
-              });
+            void import('../../lib/api').then(({ getAccessToken }) => {
+              const token = getAccessToken();
+              void fetch(
+                `${import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1'}/admin/export.csv`,
+                {
+                  headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  credentials: 'include',
+                },
+              )
+                .then((r) => r.blob())
+                .then((blob) => {
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'talkdrop-admin-export.csv';
+                  a.click();
+                });
+            });
           }}
         >
           Export report

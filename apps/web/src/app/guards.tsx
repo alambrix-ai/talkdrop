@@ -1,19 +1,31 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { Me } from '@talkdrop/shared';
-import { api, getAccessToken } from '../lib/api';
+import { api, ensureSession, getAccessToken } from '../lib/api';
 import { useAppStore } from '../lib/store';
 import { connectSocket } from '../lib/socket';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export function RequireAuth({ verified = false }: { verified?: boolean }) {
   const location = useLocation();
   const setMe = useAppStore((s) => s.setMe);
+  const [sessionReady, setSessionReady] = useState(() => Boolean(getAccessToken()));
+
+  useEffect(() => {
+    let cancelled = false;
+    void ensureSession().then((ok) => {
+      if (!cancelled) setSessionReady(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const token = getAccessToken();
 
   const meQuery = useQuery({
     queryKey: ['me'],
-    enabled: Boolean(token),
+    enabled: sessionReady && Boolean(token),
     queryFn: async () => {
       const me = await api<Me>('/me');
       setMe(me);
@@ -24,6 +36,14 @@ export function RequireAuth({ verified = false }: { verified?: boolean }) {
   useEffect(() => {
     if (meQuery.data?.ageVerified) connectSocket();
   }, [meQuery.data?.ageVerified]);
+
+  if (!sessionReady) {
+    return (
+      <div className="shell page">
+        <p className="mute">Restoring session…</p>
+      </div>
+    );
+  }
 
   if (!token) {
     return <Navigate to="/verify" replace state={{ from: location }} />;

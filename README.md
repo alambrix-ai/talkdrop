@@ -97,6 +97,24 @@ OTP via mock SMS (`devCode` outside production).
 - Server moderation tap always runs; `MOD_FORCE_FLAG=1` for chaos cuts.
 - CSAM path stubbed pending legal + T&S.
 
+## Security
+
+Hardening summary: [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md). Checklist: [`docs/SECURITY_REVIEW.md`](docs/SECURITY_REVIEW.md).
+
+**Defaults (do not ship placeholders to production):**
+
+- Generate `JWT_*`, `TRUST_TOKEN_SECRET`, `FIELD_ENCRYPTION_KEY` (`openssl rand -base64 48` / `32`), and `INTERNAL_WEBHOOK_SECRET`.
+- Production boot **rejects** `change-me` / known-weak secrets and requires the webhook secret.
+- Refresh cookie: `httpOnly`, `Secure` + `SameSite=Strict` in production; access JWT stays **in memory** (not `localStorage`).
+- Webhooks (`/internal/livekit/webhook`, `/api/v1/billing/webhook`) require header `X-Talkdrop-Webhook-Secret`.
+- CORS in production allows only `WEB_ORIGIN`.
+- Phones: SHA-256 lookup hash + AES-GCM at rest; OTP codes hashed; mock SMS never logs OTP/clear phone.
+- End users: phone OTP (sha256). Admin passwords (if added): argon2id via `apps/api/src/lib/passwords.ts`.
+
+**Residual — media is not classic E2EE:** LiveKit is an SFU with a trusted server moderation tap. The SFU operator and Talkdrop can observe media frames. Do not market this as end-to-end encryption.
+
+**Billing** stays mock (`BILLING_PROVIDER=mock`); webhook auth still required so plan flips are not world-writable.
+
 ## Docs
 
-- [`docs/SPEC.md`](docs/SPEC.md) · [`docs/AGE_VERIFICATION.md`](docs/AGE_VERIFICATION.md) · [`CHANGELOG.md`](CHANGELOG.md)
+- [`docs/SPEC.md`](docs/SPEC.md) · [`docs/AGE_VERIFICATION.md`](docs/AGE_VERIFICATION.md) · [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md) · [`CHANGELOG.md`](CHANGELOG.md)
