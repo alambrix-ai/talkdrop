@@ -2,6 +2,16 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.3.1 — 2026-10-25
+
+### Match filters (country / gender / language)
+- Profile + onboarding collect **gender** and **country**; languages already collected
+- Plus match filters UI: preferred countries, genders, languages (empty = any)
+- Persisted on `user_profiles` (`filter_*` columns) + `PUT/GET /me/filters` (Plus-gated per SPEC)
+- Matcher hard constraints enforce both sides’ filters on Redis tickets
+- Unit tests for country/gender/language filter logic
+- Billing unchanged (still mock)
+
 ## 0.3.0 — 2026-10-25
 
 ### Production adapters (billing deferred)

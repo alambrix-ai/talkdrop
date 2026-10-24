@@ -1,7 +1,16 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { INTERESTS, LANGUAGES, MOODS, MAX_INTERESTS, MIN_INTERESTS } from '@talkdrop/shared';
+import {
+  COUNTRIES,
+  GENDERS,
+  INTERESTS,
+  LANGUAGES,
+  MOODS,
+  MAX_INTERESTS,
+  MIN_INTERESTS,
+  type Gender,
+} from '@talkdrop/shared';
 import { Button, Card, Chip, Switch, Tag } from '@talkdrop/ui';
 import { api } from '../../lib/api';
 import { useAppStore } from '../../lib/store';
@@ -15,6 +24,8 @@ export default function OnboardingPage() {
   );
   const [mood, setMood] = useState(me?.profile.defaultMood ?? 'curious');
   const [languages, setLanguages] = useState<string[]>(me?.profile.languages ?? ['en', 'hi']);
+  const [gender, setGender] = useState<Gender | ''>(me?.profile.gender ?? '');
+  const [country, setCountry] = useState(me?.country ?? 'IN');
   const [blurFirst, setBlurFirst] = useState(me?.profile.blurFirst ?? true);
   const [avatarFirst, setAvatarFirst] = useState(me?.profile.avatarFirst ?? false);
   const [captions, setCaptions] = useState(me?.profile.captions ?? true);
@@ -31,8 +42,10 @@ export default function OnboardingPage() {
       selected.length >= MIN_INTERESTS &&
       selected.length <= MAX_INTERESTS &&
       languages.length >= 1 &&
-      Boolean(mood),
-    [selected, languages, mood],
+      Boolean(mood) &&
+      Boolean(gender) &&
+      Boolean(country),
+    [selected, languages, mood, gender, country],
   );
 
   function toggleInterest(slug: string) {
@@ -51,6 +64,9 @@ export default function OnboardingPage() {
         json: {
           defaultMood: mood,
           languages,
+          gender: gender || undefined,
+          country,
+          region: 'global',
           blurFirst,
           avatarFirst,
           captions,
@@ -147,6 +163,35 @@ export default function OnboardingPage() {
               }
             >
               {l.label}
+            </Chip>
+          ))}
+        </div>
+
+        <h2 className="h3" style={{ marginTop: 36 }}>
+          Gender
+        </h2>
+        <p className="mute" style={{ marginTop: 4, fontSize: 14 }}>
+          Shown only for matching preferences — keep it honest.
+        </p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          {GENDERS.map((g) => (
+            <Chip key={g.id} selected={gender === g.id} onClick={() => setGender(g.id)}>
+              {g.label}
+            </Chip>
+          ))}
+        </div>
+
+        <h2 className="h3" style={{ marginTop: 36 }}>
+          Country
+        </h2>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+          {COUNTRIES.map((c) => (
+            <Chip
+              key={c.code}
+              selected={country === c.code}
+              onClick={() => setCountry(c.code)}
+            >
+              {c.label}
             </Chip>
           ))}
         </div>

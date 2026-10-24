@@ -7,6 +7,8 @@ function ticket(partial: Partial<MatchTicket> & { userId: string }): MatchTicket
     mood: 'chill',
     languages: ['en'],
     region: 'global',
+    country: 'IN',
+    gender: 'woman',
     trustTier: 'bronze',
     tenantId: null,
     blockedIds: [],

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   EndReason,
   EnforcementAction,
+  Gender,
   Mood,
   ReportCategory,
   ReportStatus,
@@ -10,6 +11,15 @@ import {
   VerificationResult,
 } from './enums.js';
 import { MAX_INTERESTS, MIN_INTERESTS } from './constants.js';
+
+export const matchFiltersSchema = z.object({
+  countries: z.array(z.string().min(2).max(8)).max(20).optional(),
+  genders: z.array(Gender).max(4).optional(),
+  languages: z.array(z.string().min(2).max(8)).max(10).optional(),
+  /** Legacy region filter (Plus). */
+  regions: z.array(z.string().min(1).max(40)).max(20).optional(),
+});
+export type MatchFiltersInput = z.infer<typeof matchFiltersSchema>;
 
 export const apiErrorSchema = z.object({
   error: z.object({
@@ -52,6 +62,7 @@ export const patchMeSchema = z.object({
   bio: z.string().max(500).optional(),
   city: z.string().max(80).optional(),
   languages: z.array(z.string().min(2).max(8)).min(1).max(10).optional(),
+  gender: Gender.optional(),
   defaultMood: Mood.optional(),
   blurFirst: z.boolean().optional(),
   avatarFirst: z.boolean().optional(),
@@ -158,6 +169,7 @@ export const meSchema = z.object({
     bio: z.string().nullable(),
     city: z.string().nullable(),
     languages: z.array(z.string()),
+    gender: Gender.nullable(),
     defaultMood: z.string().nullable(),
     blurFirst: z.boolean(),
     avatarFirst: z.boolean(),
@@ -165,6 +177,8 @@ export const meSchema = z.object({
     translateTo: z.string().nullable(),
     locale: z.string().nullable(),
   }),
+  /** Plus match preference filters (empty = any). */
+  matchFilters: matchFiltersSchema.optional(),
   interests: z.array(z.object({ slug: z.string(), label: z.string() })),
   onboardingComplete: z.boolean(),
   isAdmin: z.boolean().optional(),

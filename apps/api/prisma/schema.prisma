@@ -155,12 +155,19 @@ model UserProfile {
   bio         String?
   city        String?
   languages   String[] @default([])
+  /// Self gender: woman | man | nonbinary | prefer_not
+  gender      String?
   defaultMood String?  @map("default_mood")
   blurFirst   Boolean  @default(true) @map("blur_first")
   avatarFirst Boolean  @default(false) @map("avatar_first")
   captions    Boolean  @default(true)
   translateTo String?  @map("translate_to")
   locale      String?  @default("en")
+  /// Plus match filters — empty array = any
+  filterCountries String[] @default([]) @map("filter_countries")
+  filterGenders   String[] @default([]) @map("filter_genders")
+  filterLanguages String[] @default([]) @map("filter_languages")
+  filterRegions   String[] @default([]) @map("filter_regions")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

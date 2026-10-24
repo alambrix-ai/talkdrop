@@ -80,6 +80,7 @@ OTP via mock SMS (`devCode` outside production).
 | Captions STT | `STT_PROVIDER=local` streaming | `deepgram` / `whisper` keys |
 | Translation | `MT_PROVIDER=mymemory` or `identity` | LibreTranslate URL |
 | Co-draw / co-watch | Socket canvas + player | — |
+| Match filters (country / gender / language) | Plus-gated prefs; profile gender/country for all | Upgrade to Plus (mock OK in dev) |
 | **Plus billing** | **Mock only (deferred)** | Stripe/Razorpay **not** wired |
 
 ## Scripts

@@ -1,17 +1,15 @@
 import { z } from 'zod';
 import { EndReason, Mood, TrustTier } from './enums.js';
 
+import { matchFiltersSchema } from './schemas.js';
+
 export const queueJoinSchema = z.object({
   interests: z.array(z.string()).min(1),
   mood: Mood,
   languages: z.array(z.string()).min(1),
   region: z.string().optional(),
-  filters: z
-    .object({
-      regions: z.array(z.string()).optional(),
-      languages: z.array(z.string()).optional(),
-    })
-    .optional(),
+  /** Plus match filters — empty fields mean any. */
+  filters: matchFiltersSchema.optional(),
 });
 
 export const matchFoundSchema = z.object({
