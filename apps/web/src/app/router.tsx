@@ -16,6 +16,7 @@ const ProfilePage = lazy(() => import('../features/profile/ProfilePage'));
 const AdminOverview = lazy(() => import('../features/admin/AdminOverview'));
 const AdminModeration = lazy(() => import('../features/admin/AdminModeration'));
 const AdminAudit = lazy(() => import('../features/admin/AdminAudit'));
+const LegalPage = lazy(() => import('../features/legal/LegalPage'));
 
 function Fallback() {
   return (
@@ -57,6 +58,7 @@ export function AppRouter() {
         <Routes>
           <Route element={<PublicLayout />}>
             <Route index element={<LandingPage />} />
+            <Route path="/legal/:slug" element={<LegalPage />} />
           </Route>
 
           <Route path="/verify" element={<VerifyPage />} />

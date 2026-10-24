@@ -6,6 +6,7 @@ import { Button, Card, Modal, Tag, VideoTile } from '@talkdrop/ui';
 import { api, apiForm } from '../../lib/api';
 import { connectSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
+import { LocalVideo } from '../../components/LocalVideo';
 import { ReportSheet } from '../report/ReportSheet';
 
 export default function CallPage() {
@@ -141,11 +142,27 @@ export default function CallPage() {
     >
       <VideoTile
         blurred={blurred}
+        placeholder={!partner}
         style={{ position: 'absolute', inset: 0, borderRadius: 0 }}
-        overlays={null}
+        overlays={
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              color: 'var(--cream)',
+              fontFamily: 'var(--font-display)',
+              fontSize: 48,
+              opacity: 0.85,
+            }}
+          >
+            {partner?.displayName?.slice(0, 1) ?? '?'}
+          </div>
+        }
       />
 
-      <VideoTile
+      <div
         style={{
           position: 'absolute',
           top: 16,
@@ -154,9 +171,13 @@ export default function CallPage() {
           height: 120,
           borderRadius: 16,
           border: '2px solid var(--white)',
+          overflow: 'hidden',
           opacity: cameraOff ? 0.4 : 1,
+          zIndex: 3,
         }}
-      />
+      >
+        <LocalVideo muted={muted} cameraOff={cameraOff} />
+      </div>
 
       <Card
         style={{

@@ -54,7 +54,7 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-### 4. Run
+### 4. Run (full stack)
 
 ```bash
 pnpm dev
@@ -62,7 +62,9 @@ pnpm dev
 
 - Web: http://localhost:5173  
 - API: http://localhost:4000/health · REST `/api/v1` · Socket `/rt`  
-- Worker: matcher loop every 300ms  
+- Matcher: runs in-process in the API (and also in `apps/worker`) every 300ms  
+
+Open two browsers (or a private window), sign in as Arjun and Mei, finish onboarding if needed, tap **Start meeting** in both — you should get a match within a second.  
 
 ### Demo accounts (after seed)
 

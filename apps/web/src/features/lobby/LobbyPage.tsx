@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ClientEvents, ServerEvents, type MatchFound } from '@talkdrop/shared';
-import { Button, Card, Orb, Tag, VideoTile } from '@talkdrop/ui';
+import { Button, Card, Orb, Tag } from '@talkdrop/ui';
+import { LocalVideo } from '../../components/LocalVideo';
 import { connectSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
 
@@ -89,7 +90,9 @@ export default function LobbyPage() {
         className="lobby-grid"
       >
         <Card style={{ padding: 18, display: 'flex', gap: 14, alignItems: 'center' }}>
-          <VideoTile style={{ width: 72, height: 96, borderRadius: 16 }} placeholder />
+          <div style={{ width: 72, height: 96, borderRadius: 16, overflow: 'hidden', flex: 'none' }}>
+            <LocalVideo muted cameraOff={false} />
+          </div>
           <div>
             <div style={{ fontWeight: 700 }}>Camera and mic ready</div>
             <div className="mute" style={{ fontSize: 14 }}>

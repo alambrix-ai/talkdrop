@@ -219,10 +219,11 @@ export default function LandingPage() {
       <footer className="shell" style={{ paddingBottom: 40, border: '1px solid var(--line)' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, paddingTop: 24, fontSize: 14 }}>
           <span className="mute">© Talkdrop</span>
-          <a href="#safety">18+ only</a>
-          <a href="#safety">Community rules</a>
-          <a href="#safety">Privacy centre</a>
-          <a href="#safety">Transparency report</a>
+          <Link to="/legal/age-notice">18+ only</Link>
+          <Link to="/legal/community-rules">Community rules</Link>
+          <Link to="/legal/privacy">Privacy centre</Link>
+          <Link to="/legal/transparency">Transparency report</Link>
+          <Link to="/legal/terms">Terms</Link>
           <a href="mailto:hello@talkdrop.app">Contact</a>
         </div>
       </footer>

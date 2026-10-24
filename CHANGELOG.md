@@ -2,6 +2,14 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.1.1 — 2026-10-25
+
+### Added
+- In-process matcher inside the API (atomic Redis claim) so matching works without a separate worker
+- End-to-end matching test: two sockets join queue → match → end → mutual keep → connection
+- Local camera preview on lobby and call (getUserMedia); partner placeholder with blur-first
+- Legal page stubs (`/legal/:slug`) linked from the landing footer
+
 ## 0.1.0 — 2026-10-24
 
 ### Added
