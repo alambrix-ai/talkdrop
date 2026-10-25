@@ -46,7 +46,7 @@ jobs:
       SMS_PROVIDER: mock
       AGE_PROVIDER: mock
       MODERATION_PROVIDER: mock
-      OTP_RETURN_DEV_CODE: 'true'
+      GOOGLE_OAUTH_MOCK: 'true'
       WEB_ORIGIN: http://localhost:5173
       API_ORIGIN: http://localhost:4000
 
