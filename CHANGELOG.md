@@ -2,6 +2,14 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.4.1 — 2026-10-25
+
+### Bugfix: brand portraits in Docker web image
+- **Root cause:** Helm referenced `talkdrop/web` but there was no web Dockerfile / nginx static packaging; Vite `public/brand/portraits/*.jpg` (Mei / Tomás) never landed in a container static root, so landing/match portraits 404’d in Dockerized deploys.
+- Added `apps/web/Dockerfile` (multi-stage pnpm build → nginx), `apps/web/nginx.conf` (serves `/brand/…`), root `.dockerignore` that **does not** exclude `public/` or `*.jpg`, and `infra/docker-compose.app.yml`.
+- Build asserts portraits exist in context and in `/usr/share/nginx/html/brand/portraits/`.
+- `pnpm docker:web:build` / `pnpm docker:web:up`; `pnpm verify:web-brand` (+ CI) after Vite build.
+
 ## 0.4.0 — 2026-10-25
 
 ### Auth: Sign in with Google (Gmail)

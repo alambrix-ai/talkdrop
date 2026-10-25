@@ -1,0 +1,21 @@
+# App images (web SPA). Use alongside infra/docker-compose.yml:
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml build web
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d web
+#
+# Verify portraits are in the image and served:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml run --rm --no-deps web \
+#     wget -q -O - http://127.0.0.1/brand/portraits/mei.jpg | head -c 3 | od -An -tx1
+#   # expect: ff d8 ff  (JPEG SOI)
+#   curl -fsSI http://localhost:8080/brand/portraits/mei.jpg
+#   curl -fsSI http://localhost:8080/brand/portraits/tomas.jpg
+
+services:
+  web:
+    image: talkdrop/web:0.1.0
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - '8080:80'
+    # Depends only on itself for static assets; API/LiveKit remain optional for landing portraits.

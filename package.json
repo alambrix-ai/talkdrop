@@ -11,7 +11,10 @@
   "scripts": {
     "dev": "pnpm -r --parallel --filter @talkdrop/api --filter @talkdrop/worker --filter @talkdrop/web dev",
     "dev:infra": "docker compose -f infra/docker-compose.yml up -d",
+    "docker:web:build": "docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml build web",
+    "docker:web:up": "docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d web",
     "build": "pnpm -r --filter @talkdrop/shared --filter @talkdrop/ui --filter @talkdrop/api --filter @talkdrop/worker --filter @talkdrop/web build",
+    "verify:web-brand": "node scripts/verify-web-brand-assets.mjs",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
