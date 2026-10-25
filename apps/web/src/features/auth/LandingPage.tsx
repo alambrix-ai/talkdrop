@@ -5,6 +5,7 @@ import { Button, Card, Logo, Tag, VideoTile } from '@talkdrop/ui';
 import { SafetyStrip } from '../../components/SafetyStrip';
 import { api } from '../../lib/api';
 import { PORTRAITS } from '../../lib/portraits';
+import { LANDING_VIBE_ROOMS } from '../../lib/vibeRooms';
 
 export default function LandingPage() {
   const stats = useQuery({
@@ -167,7 +168,7 @@ export default function LandingPage() {
         >
           <Step
             title="Verify once"
-            body="Quick on-device age check. Your face stays on your phone — only the pass/fail result is stored."
+            body="Sign in, then a simple Yes / No that you are 18+. No camera age scan, no ID upload."
           />
           <Step
             title="Pick your vibe"
@@ -223,41 +224,37 @@ export default function LandingPage() {
       </section>
 
       <section className="shell" style={{ paddingBottom: 64 }}>
-        <h2 className="h2">Tonight&apos;s hangouts</h2>
-        <p className="mute" style={{ marginTop: 8 }}>
-          Drop into themed rooms when you want a shared vibe — coming soon, preview tonight.
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'baseline' }}>
+          <h2 className="h2" style={{ margin: 0 }}>
+            Vibe rooms
+          </h2>
+          <Tag variant="mint">Preview</Tag>
+        </div>
+        <p className="mute" style={{ marginTop: 8, maxWidth: 520 }}>
+          Shared energy, no schedule. Peek in when you want company — rooms are warming up for
+          launch.
         </p>
         <div
           style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 24 }}
           className="three-col"
         >
-          <Card style={{ padding: 20 }}>
-            <Tag>8:30 PM</Tag>
-            <h3 className="h3" style={{ marginTop: 12 }}>
-              Speak Spanish night
-            </h3>
-            <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
-              Warm-up chats, soft music, zero awkward silence.
-            </p>
-          </Card>
-          <Card style={{ padding: 20 }}>
-            <Tag>9:00 PM</Tag>
-            <h3 className="h3" style={{ marginTop: 12 }}>
-              Pitch roulette
-            </h3>
-            <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
-              Two-minute wild ideas. Clap, remix, next.
-            </p>
-          </Card>
-          <Card style={{ padding: 20 }}>
-            <Tag>Open</Tag>
-            <h3 className="h3" style={{ marginTop: 12 }}>
-              Lo-fi listening room
-            </h3>
-            <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
-              Co-watch beats and chat when the mood hits.
-            </p>
-          </Card>
+          {LANDING_VIBE_ROOMS.map((room) => (
+            <Card key={room.title} style={{ padding: 20 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <Tag variant="mint">{room.energy}</Tag>
+                <Tag variant="rose">{room.vibe}</Tag>
+              </div>
+              <h3 className="h3" style={{ marginTop: 12 }}>
+                {room.title}
+              </h3>
+              <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
+                {room.blurb}
+              </p>
+              <p className="mute" style={{ marginTop: 12, fontSize: 13 }}>
+                {room.people.toLocaleString()} hanging out · Soon
+              </p>
+            </Card>
+          ))}
         </div>
       </section>
 

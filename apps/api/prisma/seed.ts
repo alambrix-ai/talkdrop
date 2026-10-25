@@ -331,29 +331,27 @@ async function main() {
     }
   }
 
-  // Rooms
+  // Rooms — energy framing (no TV-guide clock times); titles are playful vibe spots
   const roomCount = await prisma.room.count();
   if (roomCount === 0) {
-    const tonight = new Date();
-    tonight.setHours(20, 30, 0, 0);
     await prisma.room.createMany({
       data: [
         {
-          title: 'Speak Spanish night',
-          startsAt: tonight,
+          title: 'Español soft start',
+          startsAt: null,
           language: 'es',
           joinedCount: 126,
           tenantId: tenant.id,
         },
         {
-          title: 'Startup pitch roulette',
-          startsAt: new Date(tonight.getTime() + 30 * 60000),
+          title: 'Wild pitch roulette',
+          startsAt: null,
           language: 'en',
           joinedCount: 84,
           tenantId: tenant.id,
         },
         {
-          title: 'Lo-fi listening room',
+          title: 'Lo-fi couch',
           startsAt: null,
           language: 'en',
           joinedCount: 312,
@@ -361,6 +359,19 @@ async function main() {
         },
       ],
     });
+  } else {
+    // Soft-rename legacy schedule-era titles if still present
+    const renames: Array<[string, string]> = [
+      ['Speak Spanish night', 'Español soft start'],
+      ['Startup pitch roulette', 'Wild pitch roulette'],
+      ['Lo-fi listening room', 'Lo-fi couch'],
+    ];
+    for (const [from, to] of renames) {
+      await prisma.room.updateMany({
+        where: { title: from },
+        data: { title: to, startsAt: null },
+      });
+    }
   }
 
   // Sample moderation queue + audit

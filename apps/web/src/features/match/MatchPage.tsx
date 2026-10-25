@@ -8,7 +8,6 @@ import { useAppStore } from '../../lib/store';
 
 export default function MatchPage() {
   const match = useAppStore((s) => s.match);
-  const setMatch = useAppStore((s) => s.setMatch);
   const me = useAppStore((s) => s.me);
   const navigate = useNavigate();
   const [seconds, setSeconds] = useState(0);
@@ -35,14 +34,6 @@ export default function MatchPage() {
     navigate(`/call/${match.sessionId}`);
   }
 
-  function decline() {
-    if (!match) return;
-    const socket = connectSocket();
-    socket.emit(ClientEvents.MATCH_DECLINE, { sessionId: match.sessionId });
-    setMatch(null);
-    navigate('/lobby');
-  }
-
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
   const ss = String(seconds % 60).padStart(2, '0');
   const partnerPortrait = portraitForName(match.partner.displayName);
@@ -59,7 +50,8 @@ export default function MatchPage() {
         dropped in.
       </h1>
       <p className="mute" style={{ marginTop: 8 }}>
-        Blur stays on for the first 15 seconds. Jump in or skip — no hard feelings.
+        Blur stays on for the first 15 seconds. Tap Join when you are ready — or wait a moment and
+        we will start for you.
       </p>
 
       <div
@@ -136,10 +128,9 @@ export default function MatchPage() {
             <Tag variant="deep">Trust: {match.partner.trustTier}</Tag>
             <Tag variant="mint">AI safety on</Tag>
           </div>
-          <div style={{ display: 'grid', gap: 10, marginTop: 24 }}>
-            <Button onClick={join}>Jump into the hangout</Button>
-            <Button variant="ghost" onClick={decline}>
-              Skip — find someone else
+          <div style={{ marginTop: 24 }}>
+            <Button onClick={join} style={{ width: '100%' }}>
+              Join
             </Button>
           </div>
         </Card>

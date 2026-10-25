@@ -75,7 +75,7 @@ test.describe('SPEC §16 critical path', () => {
     await expect(pageA).toHaveURL(/\/match/, { timeout: 20_000 });
     await expect(pageB).toHaveURL(/\/match/, { timeout: 20_000 });
 
-    await pageA.getByRole('button', { name: /Join the call/i }).click();
+    await pageA.getByRole('button', { name: /^Join$/i }).click();
     await expect(pageA).toHaveURL(/\/call\//, { timeout: 10_000 });
 
     // (3) Next requeues → lobby
@@ -94,7 +94,7 @@ test.describe('SPEC §16 critical path', () => {
     await pageB.getByRole('button', { name: /Start hanging out/i }).click();
     await expect(pageA).toHaveURL(/\/match/, { timeout: 20_000 });
     const matchUrl = pageA.url();
-    await pageA.getByRole('button', { name: /Join the call/i }).click();
+    await pageA.getByRole('button', { name: /^Join$/i }).click();
     await expect(pageA).toHaveURL(/\/call\//);
 
     const sessionId = pageA.url().split('/call/')[1]?.split('?')[0];
@@ -124,11 +124,11 @@ test.describe('SPEC §16 critical path', () => {
 
     await pageA.goto('/after/' + sessionId);
     await pageB.goto('/after/' + sessionId);
-    if (await pageA.getByRole('button', { name: /Keep in touch/i }).isVisible()) {
-      await pageA.getByRole('button', { name: /Keep in touch/i }).click();
+    if (await pageA.getByRole('button', { name: /^Keep$/i }).isVisible()) {
+      await pageA.getByRole('button', { name: /^Keep$/i }).click();
     }
-    if (await pageB.getByRole('button', { name: /Keep in touch/i }).isVisible()) {
-      await pageB.getByRole('button', { name: /Keep in touch/i }).click();
+    if (await pageB.getByRole('button', { name: /^Keep$/i }).isVisible()) {
+      await pageB.getByRole('button', { name: /^Keep$/i }).click();
     }
 
     await pageA.goto('/connections');
@@ -160,7 +160,7 @@ test.describe('SPEC §16 critical path', () => {
     await pageA.getByRole('button', { name: /Start hanging out/i }).click();
     await pageB.getByRole('button', { name: /Start hanging out/i }).click();
     await expect(pageA).toHaveURL(/\/match/, { timeout: 20_000 });
-    await pageA.getByRole('button', { name: /Join the call/i }).click();
+    await pageA.getByRole('button', { name: /^Join$/i }).click();
     await expect(pageA).toHaveURL(/\/call\//, { timeout: 10_000 });
 
     // Either LiveKit tag (real SFU) or partner tile / controls (mock/local)

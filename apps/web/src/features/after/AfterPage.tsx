@@ -16,6 +16,7 @@ export default function AfterPage() {
   const [vibe, setVibe] = useState<Vibe | null>(null);
   const [compliments, setCompliments] = useState<string[]>([]);
   const [partnerKept, setPartnerKept] = useState(false);
+  const [showRate, setShowRate] = useState(false);
 
   const session = useQuery({
     queryKey: ['session-after', sessionId],
@@ -63,7 +64,9 @@ export default function AfterPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <Avatar name={partner?.displayName ?? '?'} size={88} />
           <div>
-            <Tag>Call ended · {mm}:{ss}</Tag>
+            <Tag>
+              Call ended · {mm}:{ss}
+            </Tag>
             <h1 className="h2" style={{ marginTop: 8 }}>
               Nice hang. Want another?
             </h1>
@@ -81,46 +84,6 @@ export default function AfterPage() {
           ))}
         </div>
 
-        <h2 className="h3" style={{ marginTop: 32 }}>
-          How was the vibe?
-        </h2>
-        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-          {(
-            [
-              ['great', 'Great'],
-              ['okay', 'Okay'],
-              ['not_for_me', 'Not for me'],
-            ] as const
-          ).map(([id, label]) => (
-            <Button
-              key={id}
-              variant={vibe === id ? 'primary' : 'ghost'}
-              onClick={() => void chooseVibe(id)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-
-        <h2 className="h3" style={{ marginTop: 28 }}>
-          Say something kind
-        </h2>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-          {COMPLIMENTS.map((c) => (
-            <Chip
-              key={c}
-              selected={compliments.includes(c)}
-              onClick={() =>
-                setCompliments((prev) =>
-                  prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c],
-                )
-              }
-            >
-              {c}
-            </Chip>
-          ))}
-        </div>
-
         {partnerKept ? (
           <Card tone="cream" style={{ padding: 16, marginTop: 24 }}>
             {partner?.displayName} also wants to keep in touch.
@@ -128,16 +91,83 @@ export default function AfterPage() {
         ) : null}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 24 }}>
-          <Button onClick={() => void keep()}>Keep hanging out</Button>
+          <Button onClick={() => void keep()}>Keep</Button>
           <Button variant="ghost" onClick={() => navigate('/lobby')}>
-            Next vibe
+            Next
           </Button>
-          <Link to="/lobby">
-            <Button variant="ghost">Back to lobby</Button>
-          </Link>
         </div>
-        <p className="mute" style={{ fontSize: 13, marginTop: 16 }}>
+        <p className="mute" style={{ fontSize: 13, marginTop: 12 }}>
           Mutual keep creates a private chat. You can block anytime from Friends.
+        </p>
+
+        <div style={{ marginTop: 20 }}>
+          <button
+            type="button"
+            onClick={() => setShowRate((v) => !v)}
+            aria-expanded={showRate}
+            style={{
+              background: 'none',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              font: 'inherit',
+              color: 'var(--ink-mute, #6b6560)',
+              fontSize: 14,
+              textDecoration: 'underline',
+              textUnderlineOffset: 3,
+            }}
+          >
+            {showRate ? 'Hide rating' : 'Rate this chat'}
+          </button>
+          {showRate ? (
+            <div style={{ marginTop: 16 }}>
+              <h2 className="h3" style={{ margin: 0 }}>
+                How was the vibe?
+              </h2>
+              <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                {(
+                  [
+                    ['great', 'Great'],
+                    ['okay', 'Okay'],
+                    ['not_for_me', 'Not for me'],
+                  ] as const
+                ).map(([id, label]) => (
+                  <Button
+                    key={id}
+                    variant={vibe === id ? 'primary' : 'ghost'}
+                    onClick={() => void chooseVibe(id)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+
+              <h2 className="h3" style={{ marginTop: 24 }}>
+                Say something kind
+              </h2>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                {COMPLIMENTS.map((c) => (
+                  <Chip
+                    key={c}
+                    selected={compliments.includes(c)}
+                    onClick={() =>
+                      setCompliments((prev) =>
+                        prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c],
+                      )
+                    }
+                  >
+                    {c}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <p style={{ marginTop: 28 }}>
+          <Link to="/lobby" className="mute" style={{ fontSize: 13 }}>
+            Back to lobby
+          </Link>
         </p>
       </div>
 

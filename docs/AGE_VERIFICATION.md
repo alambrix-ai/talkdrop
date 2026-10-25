@@ -6,7 +6,7 @@ multi-step age scoring.
 
 ## Flow
 
-1. User signs in (Google or email/password — separate from this consent).
+1. User signs in (Google primary; email/password under Other options — separate from this consent).
 2. If they have not answered yet (`ageConsent: pending`), the web app shows a modal:
    **“Are you 18 or older?”** with **Yes** / **No**.
 3. Client POSTs to `POST /api/v1/verification/age` with `{ "confirmed18Plus": true|false }`.

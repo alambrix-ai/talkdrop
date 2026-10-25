@@ -16,6 +16,7 @@ import { api } from '../../lib/api';
 import { PORTRAITS } from '../../lib/portraits';
 import { connectSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
+import { presentVibeRoom } from '../../lib/vibeRooms';
 
 interface RoomRow {
   id: string;
@@ -196,7 +197,13 @@ export default function LobbyPage() {
           </div>
         </Card>
         <Card style={{ padding: 18 }}>
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>Hangouts tonight</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ fontWeight: 700 }}>Vibe rooms</div>
+            <Tag variant="mint">Preview</Tag>
+          </div>
+          <p className="mute" style={{ fontSize: 13, margin: '6px 0 12px' }}>
+            Shared energy, no schedule — peek in when you want company.
+          </p>
           <div
             style={{
               display: 'flex',
@@ -221,35 +228,41 @@ export default function LobbyPage() {
               Soft previews stay ink-wash until you jump in — blur + AI safety still on.
             </div>
           </div>
-          {(rooms.data ?? []).slice(0, 4).map((r) => (
-            <div
-              key={r.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                gap: 8,
-                padding: '10px 0',
-                borderTop: '1px solid var(--line)',
-                alignItems: 'center',
-              }}
-            >
-              <div>
-                <div style={{ fontWeight: 600 }}>{r.title}</div>
-                <div className="mute" style={{ fontSize: 13 }}>
-                  {r.startsAt
-                    ? new Date(r.startsAt).toLocaleTimeString([], {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      })
-                    : 'Open'}{' '}
-                  · {r.joinedCount} joined
+          {(rooms.data ?? []).slice(0, 4).map((r) => {
+            const view = presentVibeRoom(r);
+            return (
+              <div
+                key={r.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  padding: '12px 0',
+                  borderTop: '1px solid var(--line)',
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700 }}>{view.title}</span>
+                    <Tag variant="rose">{view.vibe}</Tag>
+                    <Tag variant={view.energy === 'Filling up' ? 'mint' : undefined}>
+                      {view.energy}
+                    </Tag>
+                  </div>
+                  <div className="mute" style={{ fontSize: 13, marginTop: 4 }}>
+                    {view.blurb}
+                  </div>
+                  <div className="mute" style={{ fontSize: 12, marginTop: 4 }}>
+                    {view.people.toLocaleString()} hanging out
+                  </div>
                 </div>
+                <Button size="sm" onClick={() => void joinRoom(r.id)}>
+                  Join
+                </Button>
               </div>
-              <Button size="sm" variant="ghost" onClick={() => void joinRoom(r.id)}>
-                Join
-              </Button>
-            </div>
-          ))}
+            );
+          })}
           {!rooms.data?.length ? (
             <p className="mute" style={{ fontSize: 14 }}>
               Seed rooms will appear after `pnpm db:seed`.

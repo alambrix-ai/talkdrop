@@ -142,7 +142,7 @@ Hardening summary: [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md). Checklist
 - Webhooks (`/internal/livekit/webhook`, `/api/v1/billing/webhook`) require header `X-Talkdrop-Webhook-Secret`.
 - CORS in production allows only `WEB_ORIGIN`.
 - Phones (legacy / age fallback): SHA-256 lookup hash + AES-GCM at rest; mock SMS never logs clear phone.
-- End users: **Sign in with Google** (OIDC ID token verified via Google JWKS) or email+password (argon2id). Phone OTP sign-in retired (`410`).
+- End users: **Sign in with Google** is the primary path (OIDC ID token verified via Google JWKS); email+password (argon2id) is under Other options. Phone OTP sign-in retired (`410`).
 
 **Residual — media is not classic E2EE:** LiveKit is an SFU with a trusted server moderation tap. The SFU operator and Talkdrop can observe media frames. Do not market this as end-to-end encryption.
 

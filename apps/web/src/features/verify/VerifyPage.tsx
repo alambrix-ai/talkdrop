@@ -24,6 +24,7 @@ export default function VerifyPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
+  const [showOtherOptions, setShowOtherOptions] = useState(false);
 
   function applyAgeGate(me: MeAge) {
     if (me.ageVerified || me.ageConsent === 'accepted') {
@@ -209,7 +210,7 @@ export default function VerifyPage() {
                 Continue with Google
               </h2>
               <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
-                Use your Gmail account in one click. Email and password is available as a backup.
+                One tap with your Gmail account — that is the usual way in.
               </p>
               <div style={{ display: 'grid', gap: 12, marginTop: 16 }}>
                 <Button onClick={continueWithGoogle} disabled={busy}>
@@ -220,75 +221,96 @@ export default function VerifyPage() {
                     Dev: mock Google ({email || 'you@gmail.com'})
                   </Button>
                 ) : null}
-
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    margin: '4px 0',
-                  }}
-                >
-                  <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-                  <span className="mute" style={{ fontSize: 12 }}>
-                    or email
-                  </span>
-                  <div style={{ flex: 1, height: 1, background: 'var(--line)' }} />
-                </div>
-
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <Button
-                    size="sm"
-                    variant={authMode === 'signup' ? 'primary' : 'ghost'}
-                    onClick={() => setAuthMode('signup')}
-                  >
-                    Sign up
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={authMode === 'signin' ? 'primary' : 'ghost'}
-                    onClick={() => setAuthMode('signin')}
-                  >
-                    Sign in
-                  </Button>
-                </div>
-
-                {authMode === 'signup' ? (
-                  <label>
-                    <span className="mute" style={{ fontSize: 13 }}>
-                      Display name
-                    </span>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} aria-label="Display name" />
-                  </label>
+                {error && !showOtherOptions ? (
+                  <p style={{ color: 'var(--alert)', margin: 0 }}>{error}</p>
                 ) : null}
-                <label>
-                  <span className="mute" style={{ fontSize: 13 }}>
-                    Email (Gmail)
-                  </span>
-                  <Input
-                    type="email"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    aria-label="Email"
-                  />
-                </label>
-                <label>
-                  <span className="mute" style={{ fontSize: 13 }}>
-                    Password
-                  </span>
-                  <Input
-                    type="password"
-                    autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    aria-label="Password"
-                  />
-                </label>
-                {error ? <p style={{ color: 'var(--alert)', margin: 0 }}>{error}</p> : null}
-                <Button onClick={() => void submitEmailAuth()} disabled={busy || password.length < 8}>
-                  {authMode === 'signup' ? 'Create account' : 'Sign in with email'}
-                </Button>
+
+                <div style={{ marginTop: 4 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowOtherOptions((v) => !v)}
+                    aria-expanded={showOtherOptions}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      color: 'var(--ink-mute, #6b6560)',
+                      fontSize: 14,
+                      textDecoration: 'underline',
+                      textUnderlineOffset: 3,
+                    }}
+                  >
+                    Other options
+                  </button>
+                </div>
+
+                {showOtherOptions ? (
+                  <div style={{ display: 'grid', gap: 12, marginTop: 4 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <Button
+                        size="sm"
+                        variant={authMode === 'signup' ? 'primary' : 'ghost'}
+                        onClick={() => setAuthMode('signup')}
+                      >
+                        Sign up
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={authMode === 'signin' ? 'primary' : 'ghost'}
+                        onClick={() => setAuthMode('signin')}
+                      >
+                        Sign in
+                      </Button>
+                    </div>
+
+                    {authMode === 'signup' ? (
+                      <label>
+                        <span className="mute" style={{ fontSize: 13 }}>
+                          Display name
+                        </span>
+                        <Input
+                          value={name}
+                          onChange={(e) => setName(e.target.value)}
+                          aria-label="Display name"
+                        />
+                      </label>
+                    ) : null}
+                    <label>
+                      <span className="mute" style={{ fontSize: 13 }}>
+                        Email (Gmail)
+                      </span>
+                      <Input
+                        type="email"
+                        autoComplete="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        aria-label="Email"
+                      />
+                    </label>
+                    <label>
+                      <span className="mute" style={{ fontSize: 13 }}>
+                        Password
+                      </span>
+                      <Input
+                        type="password"
+                        autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        aria-label="Password"
+                      />
+                    </label>
+                    {error ? <p style={{ color: 'var(--alert)', margin: 0 }}>{error}</p> : null}
+                    <Button
+                      variant="ghost"
+                      onClick={() => void submitEmailAuth()}
+                      disabled={busy || password.length < 8}
+                    >
+                      {authMode === 'signup' ? 'Create account' : 'Sign in with email'}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </>
           ) : phase === 'declined' ? (

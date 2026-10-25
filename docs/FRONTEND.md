@@ -75,10 +75,10 @@ Display: **Bricolage Grotesque** 500-800 (headings, numbers, logo), letter-spaci
 | Route                              | Screen                                                                    | Auth                | Next screens                               |
 |------------------------------------|---------------------------------------------------------------------------|---------------------|--------------------------------------------|
 | `/`                                | Landing                                                                   | public              | /verify, /admin                            |
-| `/verify`                          | Age verification (step 1 of 3)                                            | signed in (OTP)     | /onboarding                                |
+| `/verify`                          | Age verification (step 1 of 3)                                            | signed in (Google)  | /onboarding                                |
 | `/onboarding`                      | Interests, mood, languages, safety toggles (step 2 of 3)                  | verified            | /lobby                                     |
 | `/lobby`                           | Lobby (step 3)                                                            | verified            | /match, /onboarding (edit), /profile       |
-| `/match`                           | Match found (blurred preview + icebreaker)                                | verified            | /call/:id, /match (find someone else)      |
+| `/match`                           | Match found (blurred preview + icebreaker)                                | verified            | /call/:id                                  |
 | `/call/:sessionId`                 | Live call                                                                 | session participant | /after/:id, report modal, /connections/:id |
 | `/call/:sessionId?report=1`        | Report (modal / bottom sheet)                                             | session participant | /after/:id                                 |
 | `/after/:sessionId`                | After-call                                                                | session participant | /connections, /match, /lobby               |
@@ -98,13 +98,14 @@ Layout rule for all screens: desktop uses a centred max-width container with 48 
 - **Hero:** live-count tag ("128,400 people online now"); H1 "Meet someone new, live. Without the weirdness."; supporting sentence; primary CTA "Start a conversation" (to /verify) and ghost CTA "See how safety works" (scroll to \#safety); trust chips: 18+ verified, Live AI moderation, No recordings kept.
 - **Hero visual:** two tilted video tiles (Mei, 24 and Tomás, 26) plus a floating card "You both like Jazz, Night walks, Street food" with icebreaker.
 - **Stats strip:** 128,400 online; 6 min 42 s median conversation; 1.8 reports per 1,000 calls; 41 languages (values from `/api/public/stats`, cached 60 s).
-- **Sections:** How it works (3 cards: Verify once, Pick your vibe, Say hello); Safety (4 points + "Live session check" card); Rooms and activities (3 cards with times); For teams and communities (CTA "Talk to sales"); footer links (18+ only, Community rules, Privacy centre, Transparency report, Contact).
+- **Sections:** How it works (3 cards: Verify once, Pick your vibe, Say hello); Safety (4 points + "Live session check" card); **Vibe rooms** (3 preview cards with energy tags — Open now / Filling up / Always on — not clock times); For teams and communities (CTA "Talk to sales"); footer links (18+ only, Community rules, Privacy centre, Transparency report, Contact).
 - **Mobile:** single column; hero CTAs full width (54 px high).
 
 ### 7.2 Age verification (`/verify`, step 1 of 3)
 
 - Header shows step tags ("Step 1 of 3 · Confirm 18+", "2 · Interests", "3 · Meet"); Exit button.
-- Sign-in first (Google / email) — separate from age consent; no phone OTP.
+- **Google is the only primary path** on first visit (large "Continue with Google" CTA). Dev mock Google may appear in local/dev builds.
+- Email/password lives under a collapsed **Other options** disclosure — not shown side-by-side with Google by default. No phone OTP.
 - After sign-in, a **modal only**: "Are you 18 or older?" with **Yes** / **No** (no camera age estimate, no document/ID path, no phone age fallback).
 - Yes → record consent server-side, continue to onboarding / lobby.
 - No → blocked matching message; consent persisted so refresh does not re-prompt as the primary popup.
@@ -119,17 +120,17 @@ Layout rule for all screens: desktop uses a centred max-width container with 48 
 
 ### 7.4 Lobby (`/lobby`)
 
-- Centre: animated orb with three pulse rings; H1 "Ready when you are, {firstName}."; sub-line with live match count; interest tags; primary large "Start meeting" (58 px high on mobile).
-- Device card: tiny self-preview, "Camera and mic ready", "Blur first 15 s on", "Edit" (to /onboarding). Handle permission errors here.
-- "Rooms tonight" list (e.g. Speak Spanish night 8:30 PM 126 joined; Startup pitch roulette 9:00 PM 84 joined) with "Join" buttons (v1; render disabled with "Soon" in MVP).
+- Centre: animated orb with three pulse rings; H1 "Ready when you are, {firstName}."; sub-line with live match count; interest tags; primary large "Start hanging out" (58 px high on mobile).
+- Device card: tiny self-preview, "Camera and mic ready", "Blur first 15 s on", "Tweak vibe" (to /onboarding). Handle permission errors here.
+- **Vibe rooms** card (not a clock schedule): section title "Vibe rooms" + Preview tag; one-liner "Shared energy, no schedule…". Each row shows a playful name (e.g. Español soft start, Wild pitch roulette, Lo-fi couch), vibe chip, energy chip (**Open now** / **Filling up** / **Warming up** / **Always on** — never hard clock times), short blurb, live-ish people count, and a ready-feeling **Join** (MVP may still be scaffolding/preview).
 
 ### 7.5 Match found (`/match`)
 
 - Tag "Match found · 00:04" and H1 "Found someone who likes Jazz and Night walks."
 - Large blurred partner tile (name tag "Mei, 24 · Tokyo", tag "Blur first 15 s"), small self PiP bottom-right.
 - Card: "You both like" tags; ICEBREAKER text; tags "Verified 18+", "Trust: Gold".
-- Buttons: primary "Join the call" (to /call/:id), ghost "Find someone else" (requeue). Footer tags show active filters (Anywhere, English/Hindi, Chill).
-- Auto-join after 5 seconds unless the user taps "Find someone else".
+- **Single primary action: Join** (to /call/:id). Do **not** show "Find someone else" on this screen — skipping/requeue belongs to **Next** on the live call.
+- Optional auto-join after ~5 seconds so Join remains the obvious action without a competing CTA. Footer tags show active filters (Anywhere, English/Hindi, Chill).
 
 ### 7.6 Live call (`/call/:sessionId`)
 
@@ -138,7 +139,7 @@ Layout rule for all screens: desktop uses a centred max-width container with 48 
 - Flag button (report) at left edge under the safety tag.
 - Caption box (if captions on): "Mei, translated from Japanese" plus latest line. Icebreaker box: "ICEBREAKER: What is the first song you ever bought?" (rotates on request).
 - Activity chips row (horizontal scroll): Would you rather, Co-draw, Trivia duel, Co-watch (v1; MVP shows "Would you rather" only).
-- Floating control bar (pill, overlay white): mute, camera off, **Next** (primary), chat, **End** (danger). Keyboard: M mute, V video, N next, Esc end.
+- Floating control bar (pill, overlay white): mute, camera off, **Next** (primary — ends session and requeues), chat, **End** (danger). Keyboard: M mute, V video, N next, Esc end.
 - At 3:00 show a gentle toast: "Enjoying this? Keep in touch or play a game."
 - States: connecting, reconnecting (banner), partner left (auto to After-call), cut by moderation (modal explaining why, then lobby).
 
@@ -151,11 +152,11 @@ Layout rule for all screens: desktop uses a centred max-width container with 48 
 
 ### 7.8 After-call (`/after/:sessionId`)
 
-- Header block: partner avatar, tag "Call ended · 07:42", H1 "That was a good one.", name and city, shared interest tags.
-- Vibe check: three big buttons Great / Okay / Not for me (one-tap, stored as `vibe_checks`).
-- "Say something kind" optional chips: Kind, Funny, Great listener, Thoughtful.
-- Mutual-save banner: "Mei also wants to keep in touch." appears only when the partner has already tapped keep. Buttons: primary "Keep in touch", ghost "Next person", ghost "Back to lobby".
-- Side cards (desktop): Streak (12 days), Trust level (Gold, progress bar, "320 points to Platinum"), Tonight so far (conversations 4, time chatting 31 min, new connections 1).
+- Header block: partner avatar, tag "Call ended · 07:42", H1 "Nice hang. Want another?", name and city, shared interest tags.
+- **Primary path:** one-tap **Keep** (keep in touch) and **Next** (next person / lobby). Low-emphasis "Back to lobby" link for navigation if needed.
+- Mutual-save banner: "{name} also wants to keep in touch." when the partner already tapped keep.
+- Vibe check (Great / Okay / Not for me) and compliment chips ("Say something kind") are **optional** — hidden by default behind a "Rate this chat" disclosure (APIs remain). Do not force them on the primary path.
+- Side cards (desktop): Streak, Trust level, Tonight so far.
 
 ### 7.9 Connections and chat (`/connections`)
 
@@ -188,7 +189,7 @@ Layout rule for all screens: desktop uses a centred max-width container with 48 
           Mei: "Kind of Blue is the classic. For something newer, try Kamasi Washington." / me: "Perfect, adding both to my night walk playlist." /
           Mei: "I will share my favourite spots in Tokyo too."
     Icebreakers: "What song have you replayed all week?", "What is the first song you ever bought?", "Would you rather ..." (seed 100)
-    Rooms: Speak Spanish night 20:30 (126), Startup pitch roulette 21:00 (84), Lo-fi listening room (open, 312)
+    Rooms (Vibe rooms — energy, not clock times): Español soft start · Open now (126); Wild pitch roulette · Filling up (84); Lo-fi couch · Always on (312)
     Admin: tenant Northfield University; queue #48213 Harassment High 4 min In review; #48207 Nudity (auto-cut) High 9 min; #48190 Spam Low 21 min; #48177 Seems under 18 High 32 min Escalated
     Audit: "Policy updated: moderation set to Strict" Priya S. 10:42; "User banned: case #48170" Reviewer 07 10:15; "SSO certificate rotated" Admin yesterday
 
@@ -274,10 +275,10 @@ Prototype flow in the mockups: Landing, Verify, Interests, Lobby, Match, Call (R
 | Phase                           | Deliverables                                                                                                                                                                                                                         | Done when                                                                                                                   |
 |---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
 | **0 Foundation**                | Monorepo, tooling, Docker Compose (postgres, redis, minio, livekit, coturn, mailhog), CI, Prisma schema + migrations + seed, shared package, UI tokens + base components (Section 4.4), Storybook (optional)                         | `pnpm dev` starts everything; migrations + seed run; CI green                                                               |
-| **1 Identity and onboarding**   | Google / email auth, refresh rotation, route guards; Yes/No 18+ consent modal; onboarding (interests, mood, languages, toggles); profile and settings; landing page                                                                  | New user can sign up, confirm 18+, pick interests and reach the lobby; all screens match mockups on desktop and mobile      |
+| **1 Identity and onboarding**   | Google-primary auth (email under Other options), refresh rotation, route guards; Yes/No 18+ consent modal; onboarding (interests, mood, languages, toggles); profile and settings; landing page                                    | New user can sign up, confirm 18+, pick interests and reach the lobby; all screens match mockups on desktop and mobile      |
 | **2 Matching and calls**        | Socket gateway, Redis pool, matcher worker, session lifecycle, LiveKit tokens + webhooks, lobby, match-found, live call UI (controls, PiP, timer, blur-first, icebreakers, captions placeholder), next/end flows, reconnect handling | Two browsers get matched and see each other; Next requeues; concurrency test passes; p95 match under 2 s in load test       |
 | **3 Safety v1**                 | Report and block flows, evidence service, moderation queue API, gate checks, client-frame moderation endpoint with provider adapter, cut flow + modal, enforcement ladder, appeals, rate limits and abuse defences                   | Reporting ends a call, creates a case with evidence; a flagged frame (mock) cuts the call in under 2 s; bans block re-entry |
-| **4 Social**                    | After-call (vibe, compliments, keep), connections list, chat (real-time, unread, presence), call a connection, trust score and streak jobs                                                                                           | Mutual keep creates a connection; chat works across two browsers; trust tier updates                                        |
+| **4 Social**                    | After-call (Keep / Next primary; optional vibe + compliments), connections list, chat (real-time, unread, presence), call a connection, trust score and streak jobs                                                                  | Mutual keep creates a connection; chat works across two browsers; trust tier updates                                        |
 | **5 Admin console**             | Tenant model, admin auth + roles, Overview (KPIs, chart, policy), moderation queue + case view + decisions, audit log, CSV export                                                                                                    | Reviewer can action a report end to end; audit log immutable                                                                |
 | **6 Hardening and launch prep** | Server-side moderation tap (LiveKit hidden subscriber), load and chaos tests, observability dashboards, security review, a11y audit, i18n scaffolding, legal pages, production Terraform/Helm skeleton                               | All Section 16 acceptance tests pass; no critical findings open                                                             |
 | **7 v1 features**               | Live captions + translation, activity cards, rooms, avatar mode, effects, filters, Plus billing                                                                                                                                      | Per feature acceptance criteria                                                                                             |
