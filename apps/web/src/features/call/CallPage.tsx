@@ -26,6 +26,13 @@ type ActivityState = {
   state?: { videoId: string; url: string; playing: boolean; positionSec: number };
 };
 
+type CallMsg = {
+  id: number;
+  senderId: string;
+  body: string;
+  createdAt: string;
+};
+
 export default function CallPage() {
   const { sessionId = '' } = useParams();
   const [params] = useSearchParams();
@@ -33,6 +40,7 @@ export default function CallPage() {
   const match = useAppStore((s) => s.match);
   const me = useAppStore((s) => s.me);
   const setToast = useAppStore((s) => s.setToast);
+  const connectionId = params.get('connectionId');
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -49,6 +57,10 @@ export default function CallPage() {
   const [effect, setEffect] = useState<EffectId>('none');
   const [reconnecting, setReconnecting] = useState(false);
   const [lkConnected, setLkConnected] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatMessages, setChatMessages] = useState<CallMsg[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
   const remoteRef = useRef<HTMLVideoElement>(null);
   const localLkRef = useRef<HTMLVideoElement>(null);
   const lkRef = useRef<LiveKitHandles | null>(null);
@@ -102,8 +114,8 @@ export default function CallPage() {
         if (!handles) return;
         lkRef.current = handles;
         setLkConnected(true);
+        // Remote <video> is always mounted; local tile mounts after lkConnected.
         if (remoteRef.current) handles.attachRemote(remoteRef.current);
-        if (localLkRef.current) handles.attachLocal(localLkRef.current);
       } catch (err) {
         console.warn('[livekit] connect failed', err);
         setToast('LiveKit connect failed — using local preview');
@@ -118,6 +130,13 @@ export default function CallPage() {
     };
   }, [session.data?.livekit, match?.livekit, setToast]);
 
+  // Attach local LiveKit track after the local <video> mounts (lkConnected gate).
+  useEffect(() => {
+    if (!lkConnected || !lkRef.current || !localLkRef.current) return;
+    lkRef.current.attachLocal(localLkRef.current);
+    if (remoteRef.current) lkRef.current.attachRemote(remoteRef.current);
+  }, [lkConnected]);
+
   useEffect(() => {
     void lkRef.current?.setMicEnabled(!muted);
   }, [muted]);
@@ -128,6 +147,10 @@ export default function CallPage() {
 
   useEffect(() => {
     const socket = connectSocket();
+    // Join session room so cut/activity/end events reach both peers (match + connection calls).
+    if (sessionId) {
+      socket.emit(ClientEvents.MATCH_ACCEPT, { sessionId });
+    }
     const onEnded = (payload: { reason: string; sessionId?: string }) => {
       if (payload.sessionId && payload.sessionId !== sessionId) return;
       navigate(`/after/${sessionId}`);
@@ -151,6 +174,10 @@ export default function CallPage() {
     const onEffect = (payload: { effect: EffectId; userId: string }) => {
       if (payload.userId !== me?.id) setEffect(payload.effect);
     };
+    const onChat = (msg: CallMsg & { connectionId?: string }) => {
+      if (connectionId && msg.connectionId && msg.connectionId !== connectionId) return;
+      setChatMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+    };
     socket.on(ServerEvents.SESSION_ENDED, onEnded);
     socket.on(ServerEvents.SESSION_CUT, onCut);
     socket.on(ServerEvents.ICEBREAKER_NEW, onIce);
@@ -158,6 +185,7 @@ export default function CallPage() {
     socket.on(ServerEvents.ACTIVITY_START, onActivity);
     socket.on(ServerEvents.AVATAR_MODE, onAvatar);
     socket.on(ServerEvents.EFFECT_SET, onEffect);
+    socket.on(ServerEvents.CHAT_MESSAGE, onChat);
     socket.on('disconnect', () => setReconnecting(true));
     socket.on('connect', () => setReconnecting(false));
     return () => {
@@ -168,8 +196,28 @@ export default function CallPage() {
       socket.off(ServerEvents.ACTIVITY_START, onActivity);
       socket.off(ServerEvents.AVATAR_MODE, onAvatar);
       socket.off(ServerEvents.EFFECT_SET, onEffect);
+      socket.off(ServerEvents.CHAT_MESSAGE, onChat);
     };
-  }, [navigate, sessionId, me?.id]);
+  }, [navigate, sessionId, me?.id, connectionId]);
+
+  useEffect(() => {
+    if (!chatOpen || !connectionId) return;
+    let cancelled = false;
+    setChatLoading(true);
+    void api<CallMsg[]>(`/connections/${connectionId}/messages`)
+      .then((rows) => {
+        if (!cancelled) setChatMessages(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setToast('Could not load chat');
+      })
+      .finally(() => {
+        if (!cancelled) setChatLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [chatOpen, connectionId, setToast]);
 
   useEffect(() => {
     if (!sessionId || !me?.profile.captions) return;
@@ -259,6 +307,30 @@ export default function CallPage() {
     setAvatarOnly(nextAv);
     setCameraOff(nextAv);
     connectSocket().emit(ClientEvents.AVATAR_CONSENT, { sessionId, consent: !nextAv });
+  }
+
+  function openChat() {
+    if (!connectionId) {
+      setToast('Keep this connection after the call to chat, or call from Connections.');
+      return;
+    }
+    setChatOpen((v) => !v);
+  }
+
+  async function sendChat() {
+    if (!connectionId || !chatDraft.trim()) return;
+    const body = chatDraft.trim();
+    setChatDraft('');
+    try {
+      const msg = await api<CallMsg>(`/connections/${connectionId}/messages`, {
+        method: 'POST',
+        json: { body },
+      });
+      setChatMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+    } catch {
+      setToast('Message failed to send');
+      setChatDraft(body);
+    }
   }
 
   const showRemoteVideo = lkConnected && !avatarOnly;
@@ -606,13 +678,94 @@ export default function CallPage() {
         <Button onClick={() => void next()} aria-label="Next person">
           Next
         </Button>
-        <Button size="icon" variant="ghost" aria-label="Open chat">
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label="Open chat"
+          aria-pressed={chatOpen}
+          onClick={openChat}
+        >
           Chat
         </Button>
         <Button variant="danger" onClick={() => void end()} aria-label="End call">
           End
         </Button>
       </div>
+
+      {chatOpen && connectionId ? (
+        <Card
+          style={{
+            position: 'absolute',
+            right: 16,
+            bottom: 100,
+            width: 320,
+            maxWidth: '90vw',
+            maxHeight: '50vh',
+            padding: 12,
+            background: 'var(--overlay)',
+            color: 'var(--ink)',
+            zIndex: 8,
+            display: 'grid',
+            gridTemplateRows: 'auto 1fr auto',
+            gap: 8,
+          }}
+          aria-label="In-call chat"
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <strong>Chat</strong>
+            <Button size="sm" variant="ghost" onClick={() => setChatOpen(false)}>
+              Close
+            </Button>
+          </div>
+          <div style={{ overflow: 'auto', display: 'grid', gap: 8, minHeight: 120 }}>
+            {chatLoading ? (
+              <p className="mute">Loading messages…</p>
+            ) : chatMessages.length === 0 ? (
+              <p className="mute">Say hello</p>
+            ) : (
+              chatMessages.map((m) => {
+                const mine = m.senderId === me?.id;
+                return (
+                  <div
+                    key={m.id}
+                    style={{
+                      justifySelf: mine ? 'end' : 'start',
+                      maxWidth: '85%',
+                      padding: '8px 12px',
+                      borderRadius: 14,
+                      background: mine ? 'var(--cream)' : 'var(--white)',
+                      border: mine ? 'none' : '1px solid var(--line)',
+                      fontSize: 14,
+                    }}
+                  >
+                    {m.body}
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={chatDraft}
+              onChange={(e) => setChatDraft(e.target.value)}
+              placeholder="Write a message"
+              aria-label="Message"
+              onKeyDown={(e) => e.key === 'Enter' && void sendChat()}
+              style={{
+                flex: 1,
+                borderRadius: 12,
+                border: '1px solid var(--line)',
+                padding: '8px 12px',
+                background: 'var(--white)',
+                color: 'var(--ink)',
+              }}
+            />
+            <Button size="sm" onClick={() => void sendChat()}>
+              Send
+            </Button>
+          </div>
+        </Card>
+      ) : null}
 
       <ReportSheet
         open={reportOpen}

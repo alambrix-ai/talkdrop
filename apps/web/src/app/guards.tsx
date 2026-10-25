@@ -1,6 +1,6 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import type { Me } from '@talkdrop/shared';
+import { ServerEvents, type Me } from '@talkdrop/shared';
 import { api, ensureSession, getAccessToken } from '../lib/api';
 import { useAppStore } from '../lib/store';
 import { connectSocket } from '../lib/socket';
@@ -8,13 +8,17 @@ import { useEffect, useState } from 'react';
 
 export function RequireAuth({ verified = false }: { verified?: boolean }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const setMe = useAppStore((s) => s.setMe);
-  const [sessionReady, setSessionReady] = useState(() => Boolean(getAccessToken()));
+  const setToast = useAppStore((s) => s.setToast);
+  // Always finish bootstrap (success or failure). Setting ready=false on failed
+  // refresh used to trap the UI on "Restoring session…" forever after a hard reload.
+  const [bootstrapped, setBootstrapped] = useState(() => Boolean(getAccessToken()));
 
   useEffect(() => {
     let cancelled = false;
-    void ensureSession().then((ok) => {
-      if (!cancelled) setSessionReady(ok);
+    void ensureSession().finally(() => {
+      if (!cancelled) setBootstrapped(true);
     });
     return () => {
       cancelled = true;
@@ -25,7 +29,7 @@ export function RequireAuth({ verified = false }: { verified?: boolean }) {
 
   const meQuery = useQuery({
     queryKey: ['me'],
-    enabled: sessionReady && Boolean(token),
+    enabled: bootstrapped && Boolean(token),
     queryFn: async () => {
       const me = await api<Me>('/me');
       setMe(me);
@@ -34,10 +38,26 @@ export function RequireAuth({ verified = false }: { verified?: boolean }) {
   });
 
   useEffect(() => {
-    if (meQuery.data?.ageVerified) connectSocket();
-  }, [meQuery.data?.ageVerified]);
+    if (!meQuery.data?.ageVerified) return;
+    const socket = connectSocket();
+    const onIncoming = (payload: {
+      sessionId: string;
+      connectionId: string;
+      from: { displayName: string; userId: string };
+    }) => {
+      if (!payload?.sessionId) return;
+      // Already on this call — ignore duplicate notifies
+      if (location.pathname === `/call/${payload.sessionId}`) return;
+      setToast(`Incoming call from ${payload.from?.displayName ?? 'a connection'}`);
+      navigate(`/call/${payload.sessionId}?connectionId=${payload.connectionId}`);
+    };
+    socket.on(ServerEvents.CALL_INCOMING, onIncoming);
+    return () => {
+      socket.off(ServerEvents.CALL_INCOMING, onIncoming);
+    };
+  }, [meQuery.data?.ageVerified, location.pathname, navigate, setToast]);
 
-  if (!sessionReady) {
+  if (!bootstrapped) {
     return (
       <div className="shell page">
         <p className="mute">Restoring session…</p>

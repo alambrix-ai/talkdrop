@@ -79,7 +79,7 @@ export default function ConnectionsPage() {
     const res = await api<{ sessionId: string }>(`/connections/${selectedId}/call`, {
       method: 'POST',
     });
-    navigate(`/call/${res.sessionId}`);
+    navigate(`/call/${res.sessionId}?connectionId=${selectedId}`);
   }
 
   const filtered =
@@ -161,24 +161,32 @@ export default function ConnectionsPage() {
               </Button>
             </div>
             <div style={{ padding: 16, overflow: 'auto', display: 'grid', gap: 10 }}>
-              {(messages.data ?? []).map((m) => {
-                const mine = m.senderId === me?.id;
-                return (
-                  <div
-                    key={m.id}
-                    style={{
-                      justifySelf: mine ? 'end' : 'start',
-                      maxWidth: '75%',
-                      padding: '10px 14px',
-                      borderRadius: 18,
-                      background: mine ? 'var(--cream)' : 'var(--white)',
-                      border: mine ? 'none' : '1px solid var(--line)',
-                    }}
-                  >
-                    {m.body}
-                  </div>
-                );
-              })}
+              {messages.isLoading ? (
+                <p className="mute">Loading messages…</p>
+              ) : messages.isError ? (
+                <p className="mute">Could not load messages. Try refreshing.</p>
+              ) : (messages.data ?? []).length === 0 ? (
+                <p className="mute">Say hello</p>
+              ) : (
+                (messages.data ?? []).map((m) => {
+                  const mine = m.senderId === me?.id;
+                  return (
+                    <div
+                      key={m.id}
+                      style={{
+                        justifySelf: mine ? 'end' : 'start',
+                        maxWidth: '75%',
+                        padding: '10px 14px',
+                        borderRadius: 18,
+                        background: mine ? 'var(--cream)' : 'var(--white)',
+                        border: mine ? 'none' : '1px solid var(--line)',
+                      }}
+                    >
+                      {m.body}
+                    </div>
+                  );
+                })
+              )}
             </div>
             <div style={{ padding: 12, borderTop: '1px solid var(--line)', display: 'flex', gap: 8 }}>
               <Input

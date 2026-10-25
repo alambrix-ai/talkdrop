@@ -66,9 +66,9 @@ export async function buildApp(config: AppConfig) {
 
   const providers = await createProviders(config);
   const services = createServices(config, providers);
-  await registerRoutes(app, config, services, providers);
-
+  // Hub before routes so REST handlers can notify peers (calls, chat).
   const hub = createSocketHub(app.server, config, services, providers);
+  await registerRoutes(app, config, services, providers, hub);
 
   // Subscribe to worker events
   const sub = getRedis().duplicate();
