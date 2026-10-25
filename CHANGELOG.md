@@ -2,6 +2,16 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.4.0 — 2026-10-25
+
+### Auth: Sign in with Google (Gmail)
+- Primary sign-in is **Continue with Google** (OAuth authorization code + ID token verification via `jose` / Google JWKS)
+- Secondary path: email + password (argon2id) — signup `/auth/signup`, login `/auth/login`
+- Phone SMS OTP sign-in retired (`POST /auth/otp/*` → `410`); age-verification phone fallback unchanged
+- User model: `google_sub`, `password_hash`; seed accounts use Gmail + `TalkdropDev1!`
+- Env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (required in production); `GOOGLE_OAUTH_MOCK` for local/CI mock login
+- Billing unchanged (still deferred / mock)
+
 ## 0.3.3 — 2026-10-25
 
 ### Bugfixes (video call + chat loading)

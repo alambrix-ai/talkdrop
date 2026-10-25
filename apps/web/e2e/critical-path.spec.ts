@@ -6,14 +6,9 @@ import { test, expect, type Page, type APIRequestContext } from '@playwright/tes
 
 const API = process.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
 
-async function otpLogin(request: APIRequestContext, phone: string, name: string) {
-  const req = await request.post(`${API}/auth/otp/request`, {
-    data: { phoneE164: phone },
-  });
-  expect(req.ok()).toBeTruthy();
-  const { devCode } = (await req.json()) as { devCode: string };
-  const verify = await request.post(`${API}/auth/otp/verify`, {
-    data: { phoneE164: phone, code: devCode, displayName: name },
+async function googleMockLogin(request: APIRequestContext, email: string, name: string) {
+  const verify = await request.post(`${API}/auth/google/mock`, {
+    data: { email, displayName: name, deviceFingerprint: 'e2e-browser-fp' },
   });
   expect(verify.ok()).toBeTruthy();
   const body = (await verify.json()) as { accessToken: string };
@@ -44,8 +39,8 @@ async function injectAuth(page: Page, token: string) {
 
 test.describe('SPEC §16 critical path', () => {
   test('1) sign up, verify, onboard to lobby', async ({ page, request }) => {
-    const phone = `+155520${String(Date.now()).slice(-6)}`;
-    const token = await otpLogin(request, phone, 'E2E One');
+    const email = `e2e.one.${Date.now()}@gmail.com`;
+    const token = await googleMockLogin(request, email, 'E2E One');
     await completeOnboarding(request, token);
     await injectAuth(page, token);
     await page.goto('/lobby');
@@ -59,8 +54,8 @@ test.describe('SPEC §16 critical path', () => {
     request,
   }) => {
     const stamp = String(Date.now()).slice(-6);
-    const tokenA = await otpLogin(request, `+155521${stamp}`, 'E2E A');
-    const tokenB = await otpLogin(request, `+155522${stamp}`, 'E2E B');
+    const tokenA = await googleMockLogin(request, `e2e.a.${stamp}@gmail.com`, 'E2E A');
+    const tokenB = await googleMockLogin(request, `e2e.b.${stamp}@gmail.com`, 'E2E B');
     await completeOnboarding(request, tokenA);
     await completeOnboarding(request, tokenB);
 
@@ -148,8 +143,8 @@ test.describe('SPEC §16 critical path', () => {
 
   test('7) call page surfaces LiveKit or local preview', async ({ browser, request }) => {
     const stamp = String(Date.now()).slice(-6);
-    const tokenA = await otpLogin(request, `+155531${stamp}`, 'LK A');
-    const tokenB = await otpLogin(request, `+155532${stamp}`, 'LK B');
+    const tokenA = await googleMockLogin(request, `e2e.lk.a.${stamp}@gmail.com`, 'LK A');
+    const tokenB = await googleMockLogin(request, `e2e.lk.b.${stamp}@gmail.com`, 'LK B');
     await completeOnboarding(request, tokenA);
     await completeOnboarding(request, tokenB);
 
@@ -187,17 +182,12 @@ test.describe('SPEC §16 critical path', () => {
   });
 
   test('6) admin actions a report', async ({ page, request }) => {
-    // Use seeded admin Arjun if available; else create + attach via API won't get admin.
-    // Hit admin overview with seeded phone login when possible.
-    const login = await request.post(`${API}/auth/otp/request`, {
-      data: { phoneE164: '+919876543210' },
+    // Seeded admin Arjun — email+password (or Google mock linked to same email).
+    const login = await request.post(`${API}/auth/login`, {
+      data: { email: 'arjun@gmail.com', password: 'TalkdropDev1!' },
     });
     if (!login.ok()) test.skip();
-    const { devCode } = (await login.json()) as { devCode: string };
-    const verify = await request.post(`${API}/auth/otp/verify`, {
-      data: { phoneE164: '+919876543210', code: devCode, displayName: 'Arjun K.' },
-    });
-    const { accessToken } = (await verify.json()) as { accessToken: string };
+    const { accessToken } = (await login.json()) as { accessToken: string };
 
     const reports = await request.get(`${API}/admin/reports`, {
       headers: { Authorization: `Bearer ${accessToken}` },

@@ -61,13 +61,21 @@ pnpm dev
 
 ### Demo accounts
 
-OTP via mock SMS (`devCode` outside production).
+**Primary auth:** Sign in with Google (`GET /api/v1/auth/google`). Locally without Google Cloud credentials, use **Dev: mock Google** on `/verify` or `POST /api/v1/auth/google/mock` (`GOOGLE_OAUTH_MOCK=true`).
 
-| Person   | Phone           | Notes                        |
-|----------|-----------------|------------------------------|
-| Arjun K. | +919876543210   | Gold trust, tenant admin     |
-| Mei      | +819012345678   | Connection + chat with Arjun |
-| Priya S. | +919811122233   | Tenant admin                 |
+**Secondary:** email + password (seed password `TalkdropDev1!`).
+
+| Person   | Email            | Notes                        |
+|----------|------------------|------------------------------|
+| Arjun K. | arjun@gmail.com  | Gold trust, tenant admin     |
+| Mei      | mei@gmail.com    | Connection + chat with Arjun |
+| Priya S. | priya@gmail.com  | Tenant admin                 |
+
+### Google OAuth setup
+
+1. Create an OAuth 2.0 **Web** client in Google Cloud Console.
+2. Set authorized redirect URI to `{API_ORIGIN}/api/v1/auth/google/callback` (local: `http://localhost:4000/api/v1/auth/google/callback`).
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the environment (required in production).
 
 ## Adapters (done vs needs keys)
 
@@ -75,7 +83,8 @@ OTP via mock SMS (`devCode` outside production).
 |------------|---------------|------------------------|
 | LiveKit SFU + room join | Compose LiveKit, `LIVEKIT_MOCK=false` | Prod LiveKit project |
 | Hidden mod subscriber | Token + rtc-node/meta sampler | `@livekit/rtc-node` for real frames |
-| SMS OTP | `SMS_PROVIDER=mock` | `twilio` / `messagebird` + keys |
+| Sign in with Google | `GOOGLE_OAUTH_MOCK=true` (dev/CI) | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` |
+| SMS (age fallback only) | `SMS_PROVIDER=mock` | `twilio` / `messagebird` + keys |
 | Age verification | On-device thresholds | `AGE_DOCUMENT_REDIRECT_URL` vendor |
 | Captions STT | `STT_PROVIDER=local` streaming | `deepgram` / `whisper` keys |
 | Translation | `MT_PROVIDER=mymemory` or `identity` | LibreTranslate URL |
@@ -108,8 +117,8 @@ Hardening summary: [`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md). Checklist
 - Refresh cookie: `httpOnly`, `Secure` + `SameSite=Strict` in production; access JWT stays **in memory** (not `localStorage`).
 - Webhooks (`/internal/livekit/webhook`, `/api/v1/billing/webhook`) require header `X-Talkdrop-Webhook-Secret`.
 - CORS in production allows only `WEB_ORIGIN`.
-- Phones: SHA-256 lookup hash + AES-GCM at rest; OTP codes hashed; mock SMS never logs OTP/clear phone.
-- End users: phone OTP (sha256). Admin passwords (if added): argon2id via `apps/api/src/lib/passwords.ts`.
+- Phones (legacy / age fallback): SHA-256 lookup hash + AES-GCM at rest; mock SMS never logs clear phone.
+- End users: **Sign in with Google** (OIDC ID token verified via Google JWKS) or email+password (argon2id). Phone OTP sign-in retired (`410`).
 
 **Residual — media is not classic E2EE:** LiveKit is an SFU with a trusted server moderation tap. The SFU operator and Talkdrop can observe media frames. Do not market this as end-to-end encryption.
 

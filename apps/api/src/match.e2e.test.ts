@@ -9,19 +9,17 @@ import { getRedis } from './lib/redis.js';
 import { runMatchCycle } from './modules/matching/run-cycle.js';
 import { MockLiveKitProvider } from './providers/livekit.js';
 
-async function signup(app: FastifyInstance, phone: string, name: string) {
-  const req = await app.inject({
-    method: 'POST',
-    url: '/api/v1/auth/otp/request',
-    payload: { phoneE164: phone },
-  });
-  const { devCode } = req.json() as { devCode: string };
+async function signup(app: FastifyInstance, email: string, name: string) {
   const verify = await app.inject({
     method: 'POST',
-    url: '/api/v1/auth/otp/verify',
-    payload: { phoneE164: phone, code: devCode, displayName: name },
+    url: '/api/v1/auth/google/mock',
+    payload: { email, displayName: name, deviceFingerprint: 'e2e-match-fp' },
   });
+  if (verify.statusCode !== 200) {
+    throw new Error(`google mock signup failed: ${verify.statusCode} ${verify.body}`);
+  }
   const { accessToken } = verify.json() as { accessToken: string };
+  if (!accessToken) throw new Error('missing accessToken from google mock signup');
 
   await app.inject({
     method: 'POST',
@@ -86,10 +84,9 @@ describe('E2E matching', () => {
 
   it('pairs two queued users and ends a session', async () => {
     const stamp = String(Date.now()).slice(-8);
-    const tokenA = await signup(app, `+155510${stamp}`.slice(0, 15), 'User A');
-    const tokenB = await signup(app, `+155511${stamp}`.slice(0, 15), 'User B');
+    const tokenA = await signup(app, `user-a.${stamp}@gmail.com`, 'User A');
+    const tokenB = await signup(app, `user-b.${stamp}@gmail.com`, 'User B');
 
-    // Avoid disposable block (+1555555); our numbers are +155510...
     const socketA = await connectRt(port, tokenA);
     const socketB = await connectRt(port, tokenB);
 

@@ -62,6 +62,7 @@ export class UsersService {
     return {
       id: user.id,
       displayName: user.displayName,
+      email: user.email,
       phoneE164Masked: maskedStoredPhone(user.phoneE164),
       ageVerified: user.ageVerified,
       trustScore: user.trustScore,

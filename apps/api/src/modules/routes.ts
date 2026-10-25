@@ -7,10 +7,12 @@ import {
   createAppealSchema,
   createBlockSchema,
   createReportSchema,
+  emailLoginSchema,
+  emailSignupSchema,
   endSessionSchema,
+  googleIdTokenSchema,
+  googleMockLoginSchema,
   matchFiltersSchema,
-  otpRequestSchema,
-  otpVerifySchema,
   patchMeSchema,
   putInterestsSchema,
   sendMessageSchema,
@@ -114,7 +116,7 @@ export function createServices(config: AppConfig, providers: Providers): Service
   const sessions = new SessionsService(config, providers);
   const reports = new ReportsService(config, providers, sessions);
   return {
-    auth: new AuthService(config, providers),
+    auth: new AuthService(config),
     users: new UsersService(),
     verification: new VerificationService(config, providers),
     sessions,
@@ -174,45 +176,159 @@ export async function registerRoutes(
     reply.type('text/plain').send(renderMetrics());
   });
 
-  // Auth — stricter per-route rate limits
-  app.post(
-    '/api/v1/auth/otp/request',
-    {
-      config: {
-        rateLimit: { max: 5, timeWindow: '1 minute' },
-      },
-    },
-    async (req) => {
-      const body = parse(otpRequestSchema, req.body);
-      return services.auth.requestOtp(body.phoneE164);
-    },
-  );
+  const OAUTH_STATE_COOKIE = 'td_oauth_state';
+
+  function setSessionCookies(
+    reply: { setCookie: (name: string, value: string, opts: Record<string, unknown>) => void },
+    result: { refreshToken: string; refreshExpiresAt: Date },
+  ) {
+    reply.setCookie(REFRESH_COOKIE, result.refreshToken, {
+      ...cookieOpts,
+      expires: result.refreshExpiresAt,
+    });
+  }
+
+  function sessionBody(result: {
+    accessToken: string;
+    trustToken: string;
+    user: unknown;
+  }) {
+    return {
+      accessToken: result.accessToken,
+      trustToken: result.trustToken,
+      user: result.user,
+    };
+  }
+
+  // Auth — Sign in with Google (primary) + email/password (secondary)
+  app.get('/api/v1/auth/google', async (_req, reply) => {
+    const { url, state } = services.auth.beginGoogleOAuth();
+    reply.setCookie(OAUTH_STATE_COOKIE, state, {
+      ...cookieOpts,
+      sameSite: 'lax',
+      maxAge: 600,
+    });
+    return reply.redirect(url);
+  });
+
+  app.get('/api/v1/auth/google/callback', async (req, reply) => {
+    const query = req.query as { code?: string; state?: string; error?: string };
+    if (query.error) {
+      return reply.redirect(
+        `${config.WEB_ORIGIN}/verify?authError=${encodeURIComponent(query.error)}`,
+      );
+    }
+    if (!query.code || !query.state) {
+      return reply.redirect(`${config.WEB_ORIGIN}/verify?authError=missing_code`);
+    }
+    try {
+      const result = await services.auth.handleGoogleCallback({
+        code: query.code,
+        state: query.state,
+        expectedState: req.cookies[OAUTH_STATE_COOKIE],
+        userAgent: req.headers['user-agent'],
+        ipHash: sha256(req.ip),
+      });
+      reply.clearCookie(OAUTH_STATE_COOKIE, { path: '/' });
+      setSessionCookies(reply, result);
+      return reply.redirect(`${config.WEB_ORIGIN}/verify?signedIn=google`);
+    } catch (err) {
+      const code = err instanceof AppError ? err.code : 'google_signin_failed';
+      return reply.redirect(`${config.WEB_ORIGIN}/verify?authError=${encodeURIComponent(code)}`);
+    }
+  });
 
   app.post(
-    '/api/v1/auth/otp/verify',
+    '/api/v1/auth/google',
     {
       config: {
         rateLimit: { max: 10, timeWindow: '1 minute' },
       },
     },
     async (req, reply) => {
-      const body = parse(otpVerifySchema, req.body);
-      const result = await services.auth.verifyOtp({
+      const body = parse(googleIdTokenSchema, req.body);
+      const result = await services.auth.loginWithGoogleIdToken({
         ...body,
         userAgent: req.headers['user-agent'],
         ipHash: sha256(req.ip),
       });
-      reply.setCookie(REFRESH_COOKIE, result.refreshToken, {
-        ...cookieOpts,
-        expires: result.refreshExpiresAt,
-      });
-      return {
-        accessToken: result.accessToken,
-        trustToken: result.trustToken,
-        user: result.user,
-      };
+      setSessionCookies(reply, result);
+      return sessionBody(result);
     },
   );
+
+  app.post(
+    '/api/v1/auth/google/mock',
+    {
+      config: {
+        rateLimit: { max: 20, timeWindow: '1 minute' },
+      },
+    },
+    async (req, reply) => {
+      const body = parse(googleMockLoginSchema, req.body);
+      const result = await services.auth.loginWithGoogleMock({
+        ...body,
+        userAgent: req.headers['user-agent'],
+        ipHash: sha256(req.ip),
+      });
+      setSessionCookies(reply, result);
+      return sessionBody(result);
+    },
+  );
+
+  app.post(
+    '/api/v1/auth/signup',
+    {
+      config: {
+        rateLimit: { max: 5, timeWindow: '1 minute' },
+      },
+    },
+    async (req, reply) => {
+      const body = parse(emailSignupSchema, req.body);
+      const result = await services.auth.signupWithEmail({
+        ...body,
+        userAgent: req.headers['user-agent'],
+        ipHash: sha256(req.ip),
+      });
+      setSessionCookies(reply, result);
+      return sessionBody(result);
+    },
+  );
+
+  app.post(
+    '/api/v1/auth/login',
+    {
+      config: {
+        rateLimit: { max: 10, timeWindow: '1 minute' },
+      },
+    },
+    async (req, reply) => {
+      const body = parse(emailLoginSchema, req.body);
+      const result = await services.auth.loginWithEmail({
+        ...body,
+        userAgent: req.headers['user-agent'],
+        ipHash: sha256(req.ip),
+      });
+      setSessionCookies(reply, result);
+      return sessionBody(result);
+    },
+  );
+
+  // Phone OTP sign-in removed — keep endpoints returning gone so old clients fail clearly
+  app.post('/api/v1/auth/otp/request', async () => {
+    throw new AppError(
+      'auth_method_retired',
+      'Phone OTP sign-in was replaced by Sign in with Google. Use /auth/google or email+password.',
+      410,
+    );
+  });
+  app.post('/api/v1/auth/otp/verify', async () => {
+    throw new AppError(
+      'auth_method_retired',
+      'Phone OTP sign-in was replaced by Sign in with Google. Use /auth/google or email+password.',
+      410,
+    );
+  });
 
   app.post('/api/v1/auth/refresh', async (req, reply) => {
     assertCookieOrigin(req, config);
