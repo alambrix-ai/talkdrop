@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talkdrop-api
+  labels:
+    app: talkdrop-api
+spec:
+  replicas: {{ .Values.replicaCount.api }}
+  selector:
+    matchLabels:
+      app: talkdrop-api
+  template:
+    metadata:
+      labels:
+        app: talkdrop-api
+    spec:
+      containers:
+        - name: api
+          image: {{ .Values.image.api }}
+          ports:
+            - containerPort: 4000
+          env:
+            - name: LIVEKIT_MOCK
+              value: {{ .Values.env.LIVEKIT_MOCK | quote }}
+            - name: BILLING_PROVIDER
+              value: {{ .Values.env.BILLING_PROVIDER | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.env.OTEL_EXPORTER_OTLP_ENDPOINT | quote }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 4000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 20

@@ -1,0 +1,280 @@
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import {
+  COUNTRIES,
+  GENDERS,
+  LANGUAGES,
+  ClientEvents,
+  ServerEvents,
+  type MatchFound,
+} from '@talkdrop/shared';
+import { Button, Card, Orb, Tag, VideoTile } from '@talkdrop/ui';
+import { LocalVideo } from '../../components/LocalVideo';
+import { SafetyStrip } from '../../components/SafetyStrip';
+import { api } from '../../lib/api';
+import { PORTRAITS } from '../../lib/portraits';
+import { connectSocket } from '../../lib/socket';
+import { useAppStore } from '../../lib/store';
+import { presentVibeRoom } from '../../lib/vibeRooms';
+
+interface RoomRow {
+  id: string;
+  title: string | null;
+  startsAt: string | null;
+  joinedCount: number;
+  language: string | null;
+  open: boolean;
+}
+
+export default function LobbyPage() {
+  const me = useAppStore((s) => s.me);
+  const setMatch = useAppStore((s) => s.setMatch);
+  const setToast = useAppStore((s) => s.setToast);
+  const navigate = useNavigate();
+  const [waiting, setWaiting] = useState(false);
+  const [waitHint, setWaitHint] = useState<string | null>(null);
+
+  const rooms = useQuery({
+    queryKey: ['rooms'],
+    queryFn: () => api<RoomRow[]>('/rooms'),
+  });
+
+  useEffect(() => {
+    const socket = connectSocket();
+    const onFound = (payload: MatchFound) => {
+      setMatch(payload);
+      setWaiting(false);
+      navigate('/match');
+    };
+    socket.on(ServerEvents.MATCH_FOUND, onFound);
+    return () => {
+      socket.off(ServerEvents.MATCH_FOUND, onFound);
+    };
+  }, [navigate, setMatch]);
+
+  function startMeeting() {
+    if (!me) return;
+    setWaiting(true);
+    const socket = connectSocket();
+    socket.emit(
+      ClientEvents.QUEUE_JOIN,
+      {
+        interests: me.interests.map((i) => i.slug),
+        mood: me.profile.defaultMood ?? 'chill',
+        languages: me.profile.languages,
+        region: me.region ?? 'global',
+      },
+      (ack: { ok?: boolean; estimatedWaitMs?: number; error?: string }) => {
+        if (!ack?.ok) {
+          setWaiting(false);
+          setWaitHint(ack?.error ?? 'Could not join queue');
+          return;
+        }
+        setWaitHint(`Typical wait ~${Math.round((ack.estimatedWaitMs ?? 3000) / 1000)}s`);
+      },
+    );
+  }
+
+  async function joinRoom(id: string) {
+    try {
+      const res = await api<{ sessionId: string }>(`/rooms/${id}/join`, { method: 'POST' });
+      setToast('Joined room — group roulette scaffolding');
+      navigate(`/call/${res.sessionId}`);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'Could not join room');
+    }
+  }
+
+  const firstName = me?.displayName?.split(' ')[0] ?? 'friend';
+
+  return (
+    <main className="shell page" style={{ textAlign: 'center' }}>
+      <a className="skip-link" href="#start-meeting">
+        Skip to start meeting
+      </a>
+      <div style={{ display: 'grid', placeItems: 'center', gap: 20, paddingTop: 24 }}>
+        <Orb size={168} withPulses />
+        <h1 className="h1" style={{ fontSize: 'clamp(34px, 4vw, 52px)' }}>
+          Ready when you are, {firstName}.
+        </h1>
+        <p className="mute" id="lobby-status" aria-live="polite">
+          {waiting
+            ? waitHint ?? 'Scanning for someone who shares your vibe…'
+            : 'Your people are a few seconds away — jump in whenever.'}
+        </p>
+        <div style={{ width: 'min(640px, 100%)' }}>
+          <SafetyStrip
+            tips={[
+              'Tip: keep blur on for the first vibe-check',
+              'Flag anything off — report ends the call for both',
+              'Adults only · Verified 18+',
+            ]}
+          />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
+          {me?.interests.slice(0, 6).map((i) => (
+            <Tag key={i.slug} variant="rose">
+              {i.label}
+            </Tag>
+          ))}
+        </div>
+        <div
+          style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}
+          aria-label="Active match filters"
+        >
+          <Tag>
+            {me?.country
+              ? COUNTRIES.find((c) => c.code === me.country)?.label ?? me.country
+              : 'Anywhere'}
+          </Tag>
+          <Tag>
+            {me?.profile.languages
+              .map((code) => LANGUAGES.find((l) => l.code === code)?.label ?? code)
+              .join('/') || 'Any language'}
+          </Tag>
+          <Tag>{me?.profile.defaultMood ?? 'Chill'}</Tag>
+          {me?.plan === 'plus' && me.matchFilters?.countries?.length ? (
+            <Tag variant="mint">
+              Filter:{' '}
+              {me.matchFilters.countries
+                .map((c) => COUNTRIES.find((x) => x.code === c)?.label ?? c)
+                .join(', ')}
+            </Tag>
+          ) : null}
+          {me?.plan === 'plus' && me.matchFilters?.genders?.length ? (
+            <Tag variant="mint">
+              Filter:{' '}
+              {me.matchFilters.genders
+                .map((g) => GENDERS.find((x) => x.id === g)?.label ?? g)
+                .join(', ')}
+            </Tag>
+          ) : null}
+          {me?.plan === 'plus' && me.matchFilters?.languages?.length ? (
+            <Tag variant="mint">
+              Pref lang:{' '}
+              {me.matchFilters.languages
+                .map((code) => LANGUAGES.find((l) => l.code === code)?.label ?? code)
+                .join('/')}
+            </Tag>
+          ) : null}
+        </div>
+        <Button
+          id="start-meeting"
+          style={{ minHeight: 58, minWidth: 220 }}
+          loading={waiting}
+          onClick={startMeeting}
+        >
+          {waiting ? 'Finding someone…' : 'Start hanging out'}
+        </Button>
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 16,
+          marginTop: 48,
+          textAlign: 'left',
+        }}
+        className="lobby-grid"
+      >
+        <Card style={{ padding: 18, display: 'flex', gap: 14, alignItems: 'center' }}>
+          <div style={{ width: 72, height: 96, borderRadius: 16, overflow: 'hidden', flex: 'none' }}>
+            <LocalVideo muted cameraOff={false} />
+          </div>
+          <div>
+            <div style={{ fontWeight: 700 }}>You look good — camera and mic ready</div>
+            <div className="mute" style={{ fontSize: 14 }}>
+              Blur first 15 s {me?.profile.blurFirst ? 'on' : 'off'}
+              {me?.profile.avatarFirst ? ' · Avatar first' : ''}
+              {' · '}
+              Privacy defaults respected
+            </div>
+            <Link to="/onboarding" style={{ fontWeight: 600, fontSize: 14 }}>
+              Tweak vibe
+            </Link>
+          </div>
+        </Card>
+        <Card style={{ padding: 18 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+            <div style={{ fontWeight: 700 }}>Vibe rooms</div>
+            <Tag variant="mint">Preview</Tag>
+          </div>
+          <p className="mute" style={{ fontSize: 13, margin: '6px 0 12px' }}>
+            Shared energy, no schedule — peek in when you want company.
+          </p>
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              marginBottom: 14,
+              alignItems: 'center',
+            }}
+          >
+            <VideoTile
+              placeholder={false}
+              imageSrc={PORTRAITS.mei.src}
+              imageAlt={PORTRAITS.mei.label}
+              style={{ width: 56, height: 72, borderRadius: 14, flex: 'none' }}
+            />
+            <VideoTile
+              placeholder={false}
+              imageSrc={PORTRAITS.tomas.src}
+              imageAlt={PORTRAITS.tomas.label}
+              style={{ width: 56, height: 72, borderRadius: 14, flex: 'none', transform: 'rotate(4deg)' }}
+            />
+            <div style={{ fontSize: 13 }} className="mute">
+              Soft previews stay ink-wash until you jump in — blur + AI safety still on.
+            </div>
+          </div>
+          {(rooms.data ?? []).slice(0, 4).map((r) => {
+            const view = presentVibeRoom(r);
+            return (
+              <div
+                key={r.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 10,
+                  padding: '12px 0',
+                  borderTop: '1px solid var(--line)',
+                  alignItems: 'center',
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    <span style={{ fontWeight: 700 }}>{view.title}</span>
+                    <Tag variant="rose">{view.vibe}</Tag>
+                    <Tag variant={view.energy === 'Filling up' ? 'mint' : undefined}>
+                      {view.energy}
+                    </Tag>
+                  </div>
+                  <div className="mute" style={{ fontSize: 13, marginTop: 4 }}>
+                    {view.blurb}
+                  </div>
+                  <div className="mute" style={{ fontSize: 12, marginTop: 4 }}>
+                    {view.people.toLocaleString()} hanging out
+                  </div>
+                </div>
+                <Button size="sm" onClick={() => void joinRoom(r.id)}>
+                  Join
+                </Button>
+              </div>
+            );
+          })}
+          {!rooms.data?.length ? (
+            <p className="mute" style={{ fontSize: 14 }}>
+              Seed rooms will appear after `pnpm db:seed`.
+            </p>
+          ) : null}
+        </Card>
+      </div>
+      <style>{`
+        @media (max-width: 768px) {
+          .lobby-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </main>
+  );
+}

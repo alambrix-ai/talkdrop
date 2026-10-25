@@ -1,0 +1,540 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountStatus {
+  active
+  restricted
+  suspended
+  banned
+}
+
+enum TrustTier {
+  new
+  bronze
+  silver
+  gold
+  platinum
+  flagged
+}
+
+enum VerificationMethod {
+  face_estimate
+  phone
+  document
+  /// User confirmed 18+ via Yes/No consent (current product path)
+  self_attestation
+}
+
+enum VerificationResult {
+  passed
+  uncertain
+  failed
+}
+
+enum SessionStatus {
+  matching
+  connecting
+  live
+  ended
+  cut
+}
+
+enum EndReason {
+  hangup
+  next
+  partner_left
+  report
+  moderation_cut
+  network
+  timeout
+}
+
+enum ReportCategory {
+  nudity
+  harassment
+  underage
+  spam
+  other
+}
+
+enum ReportStatus {
+  open
+  in_review
+  actioned
+  dismissed
+  escalated
+}
+
+enum EnforcementAction {
+  warn
+  video_block
+  shadow_pool
+  suspend
+  ban
+}
+
+enum Vibe {
+  great
+  okay
+  not_for_me
+}
+
+enum AdminRole {
+  owner
+  admin
+  reviewer
+  viewer
+}
+
+model Tenant {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  slug      String   @unique
+  branding  Json     @default("{}")
+  policy    Json     @default("{}")
+  sso       Json?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  users   User[]
+  members TenantMember[]
+  audit   AuditLog[]
+  rooms   Room[]
+
+  @@map("tenants")
+}
+
+model User {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phoneE164      String?       @unique @map("phone_e164")
+  /// SHA-256 of E.164 for lookup; phoneE164 holds AES-GCM ciphertext when encrypted
+  phoneHash      String?       @unique @map("phone_hash")
+  email          String?       @unique @db.Citext
+  /// Argon2id hash for email+password secondary auth (optional when Google-only)
+  passwordHash   String?       @map("password_hash")
+  /// Google OIDC `sub` — primary identity for Sign in with Google
+  googleSub      String?       @unique @map("google_sub")
+  displayName    String        @map("display_name")
+  avatarUrl      String?       @map("avatar_url")
+  birthYearRange String?       @map("birth_year_range")
+  ageVerified    Boolean       @default(false) @map("age_verified")
+  /// Set when the user answers the 18+ Yes/No consent (accepted or declined).
+  ageConsentAt   DateTime?     @map("age_consent_at") @db.Timestamptz(6)
+  trustScore     Int           @default(0) @map("trust_score")
+  trustTier      TrustTier     @default(new) @map("trust_tier")
+  status         AccountStatus @default(active)
+  region         String?
+  country        String?
+  timezone       String?
+  tenantId       String?       @map("tenant_id") @db.Uuid
+  plan           String        @default("free")
+  streakDays     Int           @default(0) @map("streak_days")
+  lastActiveDate DateTime?     @map("last_active_date") @db.Date
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt     DateTime?     @map("last_seen_at") @db.Timestamptz(6)
+
+  tenant          Tenant?              @relation(fields: [tenantId], references: [id])
+  profile         UserProfile?
+  interests       UserInterest[]
+  verifications   Verification[]
+  devices         Device[]
+  refreshTokens   RefreshToken[]
+  participations  SessionParticipant[]
+  vibeChecksFrom  VibeCheck[]          @relation("VibeFrom")
+  vibeChecksAbout VibeCheck[]          @relation("VibeAbout")
+  blocksMade      Block[]              @relation("Blocker")
+  blocksReceived  Block[]              @relation("Blocked")
+  reportsMade     Report[]             @relation("Reporter")
+  reportsReceived Report[]             @relation("Reported")
+  messages        Message[]
+  enforcements    Enforcement[]
+  appeals         Appeal[]
+  tenantMembers   TenantMember[]
+  subscriptions   Subscription[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  userId      String  @id @map("user_id") @db.Uuid
+  bio         String?
+  city        String?
+  languages   String[] @default([])
+  /// Self gender: woman | man | nonbinary | prefer_not
+  gender      String?
+  defaultMood String?  @map("default_mood")
+  blurFirst   Boolean  @default(true) @map("blur_first")
+  avatarFirst Boolean  @default(false) @map("avatar_first")
+  captions    Boolean  @default(true)
+  translateTo String?  @map("translate_to")
+  locale      String?  @default("en")
+  /// Plus match filters — empty array = any
+  filterCountries String[] @default([]) @map("filter_countries")
+  filterGenders   String[] @default([]) @map("filter_genders")
+  filterLanguages String[] @default([]) @map("filter_languages")
+  filterRegions   String[] @default([]) @map("filter_regions")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model Interest {
+  id       Int     @id @default(autoincrement())
+  slug     String  @unique
+  label    String
+  category String?
+
+  users        UserInterest[]
+  icebreakers  Icebreaker[]
+
+  @@map("interests")
+}
+
+model UserInterest {
+  userId     String @map("user_id") @db.Uuid
+  interestId Int    @map("interest_id")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interest Interest @relation(fields: [interestId], references: [id])
+
+  @@id([userId, interestId])
+  @@map("user_interests")
+}
+
+model Verification {
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String             @map("user_id") @db.Uuid
+  method           VerificationMethod
+  result           VerificationResult
+  estimatedAgeRange String?           @map("estimated_age_range")
+  provider         String?
+  providerRef      String?            @map("provider_ref")
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("verifications")
+}
+
+model Device {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  fingerprintHash String   @map("fingerprint_hash")
+  userAgent       String?  @map("user_agent")
+  ipHash          String?  @map("ip_hash")
+  firstSeen       DateTime @default(now()) @map("first_seen") @db.Timestamptz(6)
+  lastSeen        DateTime @default(now()) @map("last_seen") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, fingerprintHash])
+  @@index([fingerprintHash], map: "devices_fp")
+  @@map("devices")
+}
+
+model AuthOtp {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  phoneE164  String    @map("phone_e164") // legacy; prefer phoneHash
+  phoneHash  String?   @map("phone_hash")
+  codeHash   String    @map("code_hash")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  attempts   Int       @default(0)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([phoneE164])
+  @@index([phoneHash])
+  @@map("auth_otps")
+}
+
+model RefreshToken {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @map("token_hash")
+  deviceId  String?   @map("device_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Session {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind        String        @default("pair")
+  status      SessionStatus @default(matching)
+  region      String?
+  livekitRoom String?       @unique @map("livekit_room")
+  startedAt   DateTime?     @map("started_at") @db.Timestamptz(6)
+  endedAt     DateTime?     @map("ended_at") @db.Timestamptz(6)
+  durationSec Int?          @map("duration_sec")
+  endReason   EndReason?    @map("end_reason")
+  tenantId    String?       @map("tenant_id") @db.Uuid
+  icebreaker  String?
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  participants SessionParticipant[]
+  matchEvents  MatchEvent[]
+  vibeChecks   VibeCheck[]
+  reports      Report[]
+  connections  Connection[]
+
+  @@index([status])
+  @@map("sessions")
+}
+
+model SessionParticipant {
+  sessionId String    @map("session_id") @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  joinedAt  DateTime? @map("joined_at") @db.Timestamptz(6)
+  leftAt    DateTime? @map("left_at") @db.Timestamptz(6)
+  kept      Boolean   @default(false)
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@id([sessionId, userId])
+  @@map("session_participants")
+}
+
+model MatchEvent {
+  id                BigInt   @id @default(autoincrement())
+  sessionId         String?  @map("session_id") @db.Uuid
+  userA             String?  @map("user_a") @db.Uuid
+  userB             String?  @map("user_b") @db.Uuid
+  score             Decimal? @db.Decimal(10, 2)
+  scoreBreakdown    Json?    @map("score_breakdown")
+  waitMsA           Int?     @map("wait_ms_a")
+  waitMsB           Int?     @map("wait_ms_b")
+  outcome           String?
+  skippedWithin10s  Boolean? @map("skipped_within_10s")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session Session? @relation(fields: [sessionId], references: [id])
+
+  @@map("match_events")
+}
+
+model VibeCheck {
+  sessionId   String   @map("session_id") @db.Uuid
+  fromUser    String   @map("from_user") @db.Uuid
+  aboutUser   String   @map("about_user") @db.Uuid
+  vibe        Vibe
+  compliments String[] @default([])
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session Session @relation(fields: [sessionId], references: [id])
+  from    User    @relation("VibeFrom", fields: [fromUser], references: [id])
+  about   User    @relation("VibeAbout", fields: [aboutUser], references: [id])
+
+  @@id([sessionId, fromUser])
+  @@map("vibe_checks")
+}
+
+model Connection {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userA         String   @map("user_a") @db.Uuid
+  userB         String   @map("user_b") @db.Uuid
+  originSession String?  @map("origin_session") @db.Uuid
+  status        String   @default("active")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  origin   Session?  @relation(fields: [originSession], references: [id])
+  messages Message[]
+
+  @@unique([userA, userB])
+  @@map("connections")
+}
+
+model Message {
+  id             BigInt    @id @default(autoincrement())
+  connectionId   String    @map("connection_id") @db.Uuid
+  senderId       String    @map("sender_id") @db.Uuid
+  body           String
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  readAt         DateTime? @map("read_at") @db.Timestamptz(6)
+  moderationFlag Boolean   @default(false) @map("moderation_flag")
+
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  sender     User       @relation(fields: [senderId], references: [id])
+
+  @@index([connectionId, id(sort: Desc)], map: "messages_conn")
+  @@map("messages")
+}
+
+model Block {
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  blocker User @relation("Blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("Blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("blocks")
+}
+
+model Report {
+  id                BigInt         @id @default(autoincrement())
+  sessionId         String?        @map("session_id") @db.Uuid
+  reporterId        String         @map("reporter_id") @db.Uuid
+  reportedId        String         @map("reported_id") @db.Uuid
+  category          ReportCategory
+  details           String?
+  status            ReportStatus   @default(open)
+  severity          String         @default("medium")
+  reviewerId        String?        @map("reviewer_id") @db.Uuid
+  decision          String?
+  decidedAt         DateTime?      @map("decided_at") @db.Timestamptz(6)
+  retentionDeadline DateTime?      @map("retention_deadline") @db.Timestamptz(6)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  session  Session?   @relation(fields: [sessionId], references: [id])
+  reporter User       @relation("Reporter", fields: [reporterId], references: [id])
+  reported User       @relation("Reported", fields: [reportedId], references: [id])
+  evidence Evidence[]
+
+  @@index([status, createdAt])
+  @@map("reports")
+}
+
+model Evidence {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId   BigInt    @map("report_id")
+  storageKey String    @map("storage_key")
+  kind       String
+  encrypted  Boolean   @default(true)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("evidence")
+}
+
+model ModerationEvent {
+  id          BigInt   @id @default(autoincrement())
+  sessionId   String?  @map("session_id") @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  kind        String
+  label       String?
+  score       Decimal? @db.Decimal(10, 4)
+  actionTaken String?  @map("action_taken")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([sessionId])
+  @@map("moderation_events")
+}
+
+model Enforcement {
+  id        BigInt            @id @default(autoincrement())
+  userId    String            @map("user_id") @db.Uuid
+  action    EnforcementAction
+  reason    String?
+  reportId  BigInt?           @map("report_id")
+  expiresAt DateTime?         @map("expires_at") @db.Timestamptz(6)
+  actorId   String?           @map("actor_id") @db.Uuid
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user    User     @relation(fields: [userId], references: [id])
+  appeals Appeal[]
+
+  @@map("enforcement")
+}
+
+model Appeal {
+  id            BigInt    @id @default(autoincrement())
+  enforcementId BigInt    @map("enforcement_id")
+  userId        String    @map("user_id") @db.Uuid
+  message       String
+  status        String    @default("open")
+  decidedAt     DateTime? @map("decided_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  enforcement Enforcement @relation(fields: [enforcementId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@map("appeals")
+}
+
+model TenantMember {
+  tenantId String    @map("tenant_id") @db.Uuid
+  userId   String    @map("user_id") @db.Uuid
+  role     AdminRole
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([tenantId, userId])
+  @@map("tenant_members")
+}
+
+model Subscription {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  provider         String?
+  providerRef      String?   @map("provider_ref")
+  plan             String?
+  status           String?
+  currentPeriodEnd DateTime? @map("current_period_end") @db.Timestamptz(6)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("subscriptions")
+}
+
+model AuditLog {
+  id         BigInt   @id @default(autoincrement())
+  tenantId   String?  @map("tenant_id") @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  targetType String?  @map("target_type")
+  targetId   String?  @map("target_id")
+  meta       Json?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@map("audit_log")
+}
+
+model Icebreaker {
+  id         Int     @id @default(autoincrement())
+  text       String
+  interestId Int?    @map("interest_id")
+  mood       String?
+  locale     String  @default("en")
+  active     Boolean @default(true)
+
+  interest Interest? @relation(fields: [interestId], references: [id])
+
+  @@map("icebreakers")
+}
+
+model Room {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title     String?
+  hostId    String?   @map("host_id") @db.Uuid
+  startsAt  DateTime? @map("starts_at") @db.Timestamptz(6)
+  capacity  Int       @default(6)
+  language  String?
+  tenantId  String?   @map("tenant_id") @db.Uuid
+  joinedCount Int     @default(0) @map("joined_count")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id])
+
+  @@map("rooms")
+}

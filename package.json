@@ -1,0 +1,35 @@
+{
+  "name": "talkdrop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Talkdrop — fun, social video hangouts with safety on by default",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter @talkdrop/api --filter @talkdrop/worker --filter @talkdrop/web dev",
+    "dev:infra": "docker compose -f infra/docker-compose.yml up -d",
+    "docker:web:build": "docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml build web",
+    "docker:web:up": "docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml up -d web",
+    "build": "pnpm -r --filter @talkdrop/shared --filter @talkdrop/ui --filter @talkdrop/api --filter @talkdrop/worker --filter @talkdrop/web build",
+    "verify:web-brand": "node scripts/verify-web-brand-assets.mjs",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:generate": "pnpm --filter @talkdrop/api prisma:generate",
+    "db:migrate": "pnpm --filter @talkdrop/api prisma:migrate",
+    "db:seed": "pnpm --filter @talkdrop/api prisma:seed",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css}\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.1",
+    "vitest": "^2.1.8"
+  }
+}
