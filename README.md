@@ -96,8 +96,14 @@ pnpm dev
 ### Google OAuth setup
 
 1. Create an OAuth 2.0 **Web** client in Google Cloud Console.
-2. Set authorized redirect URI to `{API_ORIGIN}/api/v1/auth/google/callback` (local: `http://localhost:4000/api/v1/auth/google/callback`).
-3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the environment (required in production).
+2. Set authorized redirect URI to **exactly** `{API_ORIGIN}/api/v1/auth/google/callback`  
+   (local: `http://localhost:4000/api/v1/auth/google/callback`). No trailing slash on `API_ORIGIN`.
+3. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in the API environment (required when `NODE_ENV=production`).
+4. Set `WEB_ORIGIN` to the exact browser origin of the web app (scheme + host + port, no path) so the OAuth callback can redirect back and CORS/cookies work.
+5. Verify: open `/verify` → **Continue with Google** should hit Google’s account picker (not bounce with `google_not_configured`). After consent you return to `/verify` and the 18+ Yes/No modal.  
+   `GET /api/v1/auth/methods` should report `{ "google": true, ... }`.
+
+Without Cloud credentials on a non-production API, enable `GOOGLE_OAUTH_MOCK=true` and use **Dev: mock Google** (or email under Other options). The real Google button will explain that OAuth is not configured instead of failing silently.
 
 ## Adapters (done vs needs keys)
 

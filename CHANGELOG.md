@@ -2,6 +2,13 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.5.1 — 2026-10-25
+
+### Bugfix: Google sign-in failures on /verify
+- `GET /auth/google` redirects to `/verify?authError=…` when Google Cloud credentials are missing (no raw JSON 503)
+- Normalize `WEB_ORIGIN` / `API_ORIGIN` and blank `GOOGLE_CLIENT_*` so redirect URIs stay exact
+- `GET /auth/methods` + clearer `/verify` errors; Dev mock follows API `GOOGLE_OAUTH_MOCK`, not only Vite `DEV`
+
 ## 0.5.0 — 2026-10-25
 
 ### Age gate: Yes/No 18+ consent only

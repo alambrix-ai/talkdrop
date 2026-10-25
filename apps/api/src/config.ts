@@ -104,6 +104,16 @@ function assertProductionSecrets(config: AppConfig): void {
   }
 }
 
+/** Strip trailing slashes so redirect_uri / CORS origins stay exact. */
+function normalizeOrigin(origin: string): string {
+  return origin.trim().replace(/\/+$/, '');
+}
+
+function normalizeOptionalSecret(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (cached && env === process.env) return cached;
   const parsed = envSchema.safeParse(env);
@@ -111,22 +121,29 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     const msg = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
     throw new Error(`Invalid environment: ${msg}`);
   }
-  assertProductionSecrets(parsed.data);
-  if (parsed.data.NODE_ENV === 'production') {
-    if (parsed.data.LIVEKIT_MOCK) {
+  const data: AppConfig = {
+    ...parsed.data,
+    WEB_ORIGIN: normalizeOrigin(parsed.data.WEB_ORIGIN),
+    API_ORIGIN: normalizeOrigin(parsed.data.API_ORIGIN),
+    GOOGLE_CLIENT_ID: normalizeOptionalSecret(parsed.data.GOOGLE_CLIENT_ID),
+    GOOGLE_CLIENT_SECRET: normalizeOptionalSecret(parsed.data.GOOGLE_CLIENT_SECRET),
+  };
+  assertProductionSecrets(data);
+  if (data.NODE_ENV === 'production') {
+    if (data.LIVEKIT_MOCK) {
       throw new Error('LIVEKIT_MOCK=true is not allowed in production');
     }
-    if (!parsed.data.GOOGLE_CLIENT_ID || !parsed.data.GOOGLE_CLIENT_SECRET) {
+    if (!data.GOOGLE_CLIENT_ID || !data.GOOGLE_CLIENT_SECRET) {
       throw new Error(
         'Production requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET for Sign in with Google',
       );
     }
-    if (parsed.data.GOOGLE_OAUTH_MOCK) {
+    if (data.GOOGLE_OAUTH_MOCK) {
       throw new Error('GOOGLE_OAUTH_MOCK is not allowed in production');
     }
   }
-  if (env === process.env) cached = parsed.data;
-  return parsed.data;
+  if (env === process.env) cached = data;
+  return data;
 }
 
 export function resetConfigCache(): void {

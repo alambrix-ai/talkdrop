@@ -40,6 +40,28 @@ describe('API smoke', () => {
     expect(req.statusCode).toBe(410);
   });
 
+  it('auth methods reports mock when Google Cloud creds are absent', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/auth/methods' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      google: false,
+      googleMock: true,
+      emailPassword: true,
+    });
+  });
+
+  it('GET /auth/google redirects to /verify when Google is not configured', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/google',
+      // follow redirects off — inject does not follow by default
+    });
+    expect(res.statusCode).toBe(302);
+    const location = res.headers.location as string;
+    expect(location).toContain('/verify?authError=');
+    expect(location).toContain('google_not_configured');
+  });
+
   it('Google mock sign-in → age verify → me', async () => {
     const email = `smoke.${Date.now()}@gmail.com`;
     const signin = await app.inject({

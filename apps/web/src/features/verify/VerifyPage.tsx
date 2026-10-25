@@ -7,10 +7,32 @@ import { useAppStore } from '../../lib/store';
 type Phase = 'auth' | 'consent' | 'declined';
 type AuthMode = 'signin' | 'signup';
 type MeAge = { ageVerified: boolean; ageConsent?: 'pending' | 'accepted' | 'declined' };
+type AuthMethods = { google: boolean; googleMock: boolean; emailPassword: boolean };
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
-const GOOGLE_MOCK =
+const VITE_GOOGLE_MOCK =
   import.meta.env.DEV || import.meta.env.VITE_GOOGLE_OAUTH_MOCK === 'true';
+
+const AUTH_ERROR_COPY: Record<string, string> = {
+  google_not_configured:
+    'Google sign-in is not configured on this server. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (and register the redirect URI), or use Other options / Dev mock.',
+  oauth_state_invalid:
+    'Google sign-in timed out or cookies were blocked. Allow cookies for this site and try again.',
+  google_token_exchange_failed:
+    'Google rejected the sign-in. Usually the redirect URI in Google Cloud does not exactly match {API_ORIGIN}/api/v1/auth/google/callback.',
+  google_token_invalid: 'Google credential could not be verified. Try again.',
+  google_profile_incomplete: 'Your Google account must share an email address.',
+  google_email_unverified: 'Verify your Google email, then try again.',
+  access_denied: 'Google sign-in was cancelled.',
+  missing_code: 'Google did not return an auth code. Try again.',
+};
+
+function googleAuthErrorMessage(code: string): string {
+  return (
+    AUTH_ERROR_COPY[code] ??
+    `Google sign-in failed (${code}). Try again or use Other options.`
+  );
+}
 
 export default function VerifyPage() {
   const navigate = useNavigate();
@@ -25,6 +47,10 @@ export default function VerifyPage() {
   const [busy, setBusy] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [showOtherOptions, setShowOtherOptions] = useState(false);
+  const [authMethods, setAuthMethods] = useState<AuthMethods | null>(null);
+
+  const showGoogleMock = Boolean(authMethods?.googleMock ?? VITE_GOOGLE_MOCK);
+  const googleConfigured = authMethods?.google;
 
   function applyAgeGate(me: MeAge) {
     if (me.ageVerified || me.ageConsent === 'accepted') {
@@ -39,9 +65,20 @@ export default function VerifyPage() {
   }
 
   useEffect(() => {
+    void api<AuthMethods>('/auth/methods', { auth: false })
+      .then(setAuthMethods)
+      .catch(() => {
+        /* keep Vite fallback for mock visibility */
+      });
+  }, []);
+
+  useEffect(() => {
     const authError = searchParams.get('authError');
     if (authError) {
-      setError(`Google sign-in failed (${authError}). Try again or use email.`);
+      setError(googleAuthErrorMessage(authError));
+      if (authError === 'google_not_configured') {
+        setShowOtherOptions(true);
+      }
       searchParams.delete('authError');
       setSearchParams(searchParams, { replace: true });
       return;
@@ -57,7 +94,11 @@ export default function VerifyPage() {
       setError(null);
       try {
         const ok = await ensureSession();
-        if (!ok) throw new Error('Session missing after Google sign-in');
+        if (!ok) {
+          throw new Error(
+            'Signed in with Google, but the session cookie was missing. Check WEB_ORIGIN matches this site and that cookies are allowed.',
+          );
+        }
         const me = (await api('/me')) as MeAge;
         setMe(me as never);
         applyAgeGate(me);
@@ -72,6 +113,11 @@ export default function VerifyPage() {
 
   function continueWithGoogle() {
     setError(null);
+    if (googleConfigured === false) {
+      setError(googleAuthErrorMessage('google_not_configured'));
+      setShowOtherOptions(true);
+      return;
+    }
     window.location.assign(`${API_URL}/auth/google`);
   }
 
@@ -216,10 +262,16 @@ export default function VerifyPage() {
                 <Button onClick={continueWithGoogle} disabled={busy}>
                   Continue with Google
                 </Button>
-                {GOOGLE_MOCK ? (
+                {showGoogleMock ? (
                   <Button variant="ghost" onClick={() => void continueWithGoogleMock()} disabled={busy}>
                     Dev: mock Google ({email || 'you@gmail.com'})
                   </Button>
+                ) : null}
+                {googleConfigured === false && !error ? (
+                  <p className="mute" style={{ margin: 0, fontSize: 13 }}>
+                    Real Google OAuth is not configured on the API yet. Use Dev mock or Other
+                    options until GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are set.
+                  </p>
                 ) : null}
                 {error && !showOtherOptions ? (
                   <p style={{ color: 'var(--alert)', margin: 0 }}>{error}</p>

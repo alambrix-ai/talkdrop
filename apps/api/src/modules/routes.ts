@@ -146,11 +146,17 @@ export async function registerRoutes(
   providers: Providers,
   hub?: SocketHub,
 ): Promise<void> {
+  // Secure cookies follow the API origin scheme (not NODE_ENV) so HTTP staging
+  // still works, and HTTPS always marks cookies Secure.
+  const cookieSecure = config.API_ORIGIN.startsWith('https://');
+  // Lax (not Strict): OAuth returns via top-level navigation from Google; refresh
+  // is same-site XHR when WEB/API share an eTLD+1. Strict would also be fine for
+  // that case, but Lax matches the oauth_state cookie and avoids edge-case drops.
   const cookieOpts = {
     path: '/',
     httpOnly: true,
-    sameSite: (config.NODE_ENV === 'production' ? 'strict' : 'lax') as 'strict' | 'lax',
-    secure: config.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    secure: cookieSecure,
   };
 
   app.setErrorHandler((err, _req, reply) => {
@@ -199,14 +205,28 @@ export async function registerRoutes(
   }
 
   // Auth — Sign in with Google (primary) + email/password (secondary)
+  /** Public: so /verify can show mock vs real Google without guessing Vite flags. */
+  app.get('/api/v1/auth/methods', async () => ({
+    google: services.auth.googleConfigured(),
+    googleMock: services.auth.googleMockEnabled(),
+    emailPassword: true,
+  }));
+
   app.get('/api/v1/auth/google', async (_req, reply) => {
-    const { url, state } = services.auth.beginGoogleOAuth();
-    reply.setCookie(OAUTH_STATE_COOKIE, state, {
-      ...cookieOpts,
-      sameSite: 'lax',
-      maxAge: 600,
-    });
-    return reply.redirect(url);
+    try {
+      const { url, state } = services.auth.beginGoogleOAuth();
+      reply.setCookie(OAUTH_STATE_COOKIE, state, {
+        ...cookieOpts,
+        maxAge: 600,
+      });
+      return reply.redirect(url);
+    } catch (err) {
+      // Browser navigates here from /verify — never leave the user on raw JSON 503.
+      const code = err instanceof AppError ? err.code : 'google_signin_failed';
+      return reply.redirect(
+        `${config.WEB_ORIGIN}/verify?authError=${encodeURIComponent(code)}`,
+      );
+    }
   });
 
   app.get('/api/v1/auth/google/callback', async (req, reply) => {
