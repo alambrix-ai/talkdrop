@@ -1,5 +1,3 @@
-import type { VerificationResult } from './enums.js';
-
 export interface ModerationLabel {
   name: string;
   score: number;
@@ -12,15 +10,6 @@ export interface ModerationProvider {
     locale?: string,
   ): Promise<{ text: string; toxicity: number; labels: string[] }>;
   scoreText(text: string): Promise<{ toxicity: number; labels: string[] }>;
-}
-
-export interface AgeVerificationProvider {
-  verifyFromEstimate(input: {
-    estimatedAge: number;
-    confidence: number;
-    liveness: boolean;
-  }): Promise<VerificationResult>;
-  startDocumentCheck(userId: string): Promise<{ redirectUrl: string }>;
 }
 
 export interface SmsProvider {

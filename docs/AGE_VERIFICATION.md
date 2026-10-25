@@ -1,33 +1,42 @@
-# Age verification
+# Age verification (18+ consent)
 
-Talkdrop verifies age **before** a user can enter the matching pool (SPEC §7.2 / §13.4).
+Talkdrop gates matching with a **single Yes/No self-attestation** before a user can enter
+the matching pool. There is **no** on-device camera age estimate, document-check vendor, or
+multi-step age scoring.
 
-## On-device estimate (default)
+## Flow
 
-1. The web client captures a brief camera frame **locally**.
-2. An on-device estimator returns `{ estimatedAge, confidence, liveness }`.
-3. Only that result is POSTed to `POST /api/v1/verification/age` — **no face image is uploaded**.
-4. Server thresholds (`AGE_PROVIDER=ondevice` or `mock`):
-   - **passed** — estimate ≥ 21, confidence ≥ 0.8, liveness true
-   - **uncertain** — estimate ≥ 18 with lower confidence → route to fallback
-   - **failed** — under 18 or no liveness → blocked from matching
+1. User signs in (Google or email/password — separate from this consent).
+2. If they have not answered yet (`ageConsent: pending`), the web app shows a modal:
+   **“Are you 18 or older?”** with **Yes** / **No**.
+3. Client POSTs to `POST /api/v1/verification/age` with `{ "confirmed18Plus": true|false }`.
+4. Server records a `verifications` row (`method: self_attestation`) and updates the user:
+   - **Yes** — `age_verified = true`, `age_consent_at = now` → matching / gated surfaces unlock
+   - **No** — `age_verified = false`, `age_consent_at = now` → matching stays locked with a clear message
+5. Refresh does not re-ask while `age_consent_at` is set. Declined users see a blocked state
+   (they can still confirm Yes later if they answered by mistake).
 
-## Document-check fallback (stub)
+## API
 
-`POST /api/v1/verification/fallback/start` with `{ method: "document" }` returns a
-`redirectUrl` from `AgeVerificationProvider.startDocumentCheck`.
+| Method | Path | Body | Notes |
+|--------|------|------|-------|
+| POST | `/api/v1/verification/age` | `{ confirmed18Plus: boolean }` | Auth required |
+| POST | `/api/v1/verification/fallback/*` | — | **410 Gone** — camera/document/phone age paths retired |
 
-Set `AGE_DOCUMENT_REDIRECT_URL` to your vendor’s hosted flow (Persona, Veriff, Yoti, …).
-Talkdrop does **not** ship paid vendor credentials. Until configured, the stub redirects
-to `https://example.com/age-document-check?user=…`.
+`GET /api/v1/me` includes `ageVerified` and `ageConsent`: `pending` \| `accepted` \| `declined`.
 
-Complete the loop with `POST /api/v1/verification/fallback/complete` once the vendor
-callback confirms the check.
+## What we do **not** do
+
+- On-device face age estimation / TensorFlow.js camera flow
+- Document-check redirect vendors (`AGE_DOCUMENT_REDIRECT_URL` removed)
+- Phone OTP as an age fallback (phone OTP for sign-in remains retired separately)
+- Pass / uncertain / failed thresholds based on a face estimate
 
 ## Env
 
-| Variable | Purpose |
-|----------|---------|
-| `AGE_PROVIDER` | `ondevice` (default) \| `mock` |
-| `AGE_DOCUMENT_REDIRECT_URL` | Vendor document-check start URL |
-| `WEB_ORIGIN` | Return URL query param for vendor redirect |
+No age-provider env vars. Google OAuth and other auth settings are unchanged.
+
+## Safety elsewhere
+
+Report, block, live moderation, and under-18 report escalation stay as documented in SPEC /
+SECURITY. This consent gate does not replace those controls.

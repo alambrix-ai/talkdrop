@@ -16,8 +16,6 @@ import {
   patchMeSchema,
   putInterestsSchema,
   sendMessageSchema,
-  verificationFallbackCompleteSchema,
-  verificationFallbackStartSchema,
   vibeCheckSchema,
 } from '@talkdrop/shared';
 import type { AppConfig } from '../config.js';
@@ -118,7 +116,7 @@ export function createServices(config: AppConfig, providers: Providers): Service
   return {
     auth: new AuthService(config),
     users: new UsersService(),
-    verification: new VerificationService(config, providers),
+    verification: new VerificationService(),
     sessions,
     connections: new ConnectionsService(),
     reports,
@@ -349,27 +347,33 @@ export async function registerRoutes(
     return { ok: true };
   });
 
-  // Verification
+  // Verification — Yes/No 18+ consent only (no camera / document / phone fallback)
   app.post('/api/v1/verification/age', { preHandler: [app.authenticate] }, async (req) => {
     const body = parse(ageVerificationSchema, req.body);
-    return services.verification.submitAge(req.user!.id, body);
+    return services.verification.submitConsent(req.user!.id, body);
   });
 
   app.post(
     '/api/v1/verification/fallback/start',
     { preHandler: [app.authenticate] },
-    async (req) => {
-      const body = parse(verificationFallbackStartSchema, req.body);
-      return services.verification.startFallback(req.user!.id, body.method);
+    async () => {
+      throw new AppError(
+        'gone',
+        'Age fallbacks retired — confirm 18+ with Yes/No consent only',
+        410,
+      );
     },
   );
 
   app.post(
     '/api/v1/verification/fallback/complete',
     { preHandler: [app.authenticate] },
-    async (req) => {
-      const body = parse(verificationFallbackCompleteSchema, req.body);
-      return services.verification.completeFallback(req.user!.id, body.method, body.providerRef);
+    async () => {
+      throw new AppError(
+        'gone',
+        'Age fallbacks retired — confirm 18+ with Yes/No consent only',
+        410,
+      );
     },
   );
 

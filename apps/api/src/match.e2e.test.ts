@@ -25,7 +25,7 @@ async function signup(app: FastifyInstance, email: string, name: string) {
     method: 'POST',
     url: '/api/v1/verification/age',
     headers: { authorization: `Bearer ${accessToken}` },
-    payload: { estimatedAge: 24, confidence: 0.95, liveness: true },
+    payload: { confirmed18Plus: true },
   });
 
   await app.inject({

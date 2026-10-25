@@ -18,7 +18,7 @@ async function googleMockLogin(request: APIRequestContext, email: string, name: 
 async function completeOnboarding(request: APIRequestContext, token: string) {
   await request.post(`${API}/verification/age`, {
     headers: { Authorization: `Bearer ${token}` },
-    data: { estimatedAge: 24, confidence: 0.95, liveness: true },
+    data: { confirmed18Plus: true },
   });
   await request.patch(`${API}/me`, {
     headers: { Authorization: `Bearer ${token}` },

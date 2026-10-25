@@ -15,7 +15,7 @@ Everything needed to build apps/api, apps/worker, the PostgreSQL schema and infr
 | Realtime media                    | LiveKit (self-hosted SFU) + coturn TURN                                                                                                                                                                                        | 1:1 routed through the SFU (not P2P) so media can be moderated. Server SDK `livekit-server-sdk` issues short-lived tokens.                         |
 | Object storage                    | S3-compatible (MinIO in dev)                                                                                                                                                                                                   | Evidence clips only, encrypted, 24 h lifecycle expiry.                                                                                             |
 | Moderation                        | Provider adapters (`ModerationProvider` interface) with a mock for dev; real: cloud image moderation + speech-to-text + text toxicity                                                                                          | Swappable. Never call providers directly from routes.                                                                                              |
-| Age/identity                      | `AgeVerificationProvider` interface; on-device face-age estimation in browser (TensorFlow.js) + phone OTP; document check via third-party provider later                                                                       | Mock provider in dev that always returns "18+ verified".                                                                                           |
+| Age/identity                      | Yes/No 18+ self-attestation (`POST /verification/age` with `confirmed18Plus`); durable `age_verified` + `age_consent_at`                                                                                                      | Declined users stay out of the matching pool; see `docs/AGE_VERIFICATION.md`.                                                                      |
 | Tooling                           | pnpm workspaces, ESLint, Prettier, Vitest, Supertest, Playwright, Docker Compose, GitHub Actions                                                                                                                               |                                                                                                                                                    |
 
 
@@ -29,7 +29,7 @@ Everything needed to build apps/api, apps/worker, the PostgreSQL schema and infr
 
 ### 3.2 Life of a call
 
-1.  User signs in (phone OTP), passes age check; the API issues a signed **trust token** (short JWT: userId, ageVerified, trustTier).
+1.  User signs in (Google / email), confirms 18+ (Yes/No); the API issues a signed **trust token** (short JWT: userId, ageVerified, trustTier).
 2.  Client opens a Socket.IO connection (auth with access token) and emits `queue:join` with preferences.
 3.  The matcher worker pairs two users (Section 11), creates a `sessions` row and a LiveKit room, and emits `match:found` to both with a LiveKit join token.
 4.  Both clients connect to LiveKit. First 15 seconds are blurred (Section 12). Icebreaker is shown.
@@ -84,7 +84,7 @@ Use Prisma models mirroring the SQL below (snake_case in DB via `@map`). All tab
     -- Enums
     CREATE TYPE account_status AS ENUM ('active','restricted','suspended','banned');
     CREATE TYPE trust_tier AS ENUM ('new','bronze','silver','gold','platinum','flagged');
-    CREATE TYPE verification_method AS ENUM ('face_estimate','phone','document');
+    CREATE TYPE verification_method AS ENUM ('face_estimate','phone','document','self_attestation');
     CREATE TYPE verification_result AS ENUM ('passed','uncertain','failed');
     CREATE TYPE session_status AS ENUM ('matching','connecting','live','ended','cut');
     CREATE TYPE end_reason AS ENUM ('hangup','next','partner_left','report','moderation_cut','network','timeout');
@@ -208,7 +208,7 @@ Base path `/api/v1`. JSON, zod-validated, errors as `{ "error": { "code", "messa
 | POST /auth/otp/request                             | Send OTP to phone (rate-limited, disposable-number block)                                                                                | public        |
 | POST /auth/otp/verify                              | Verify code, create user if new, return access token + set refresh cookie                                                                | public        |
 | POST /auth/refresh, POST /auth/logout              | Rotate / revoke refresh token                                                                                                            | cookie        |
-| POST /verification/age                             | Submit client-side face-age estimate result + liveness signal; server validates and records `verifications`; sets `age_verified` on pass | user          |
+| POST /verification/age                             | Yes/No 18+ consent `{ confirmed18Plus }`; records `self_attestation`; sets `age_verified` + `age_consent_at` | user          |
 | POST /verification/fallback/start, /complete       | Phone-code or document provider flow                                                                                                     | user          |
 | GET /me, PATCH /me                                 | Profile, settings (blur, avatar-first, captions, languages, mood)                                                                        | verified      |
 | PUT /me/interests                                  | Replace interest set (3 to 12)                                                                                                           | verified      |
@@ -306,11 +306,8 @@ warn, video_block (24 h), shadow_pool (matched only with flagged users), suspend
       transcribeAndScore(audio: Buffer, locale?: string): Promise<{ text: string; toxicity: number; labels: string[] }>;
       scoreText(text: string): Promise<{ toxicity: number; labels: string[] }>;
     }
-    interface AgeVerificationProvider {
-      verifyFromEstimate(input: { estimatedAge: number; confidence: number; liveness: boolean }): Promise<'passed'|'uncertain'|'failed'>;
-      startDocumentCheck(userId: string): Promise<{ redirectUrl: string }>;
-    }
-    // Thresholds in config: nudity cut >= 0.85, review 0.6-0.85; toxicity cut >= 0.9; age pass requires estimate >= 21 (buffer) with confidence >= 0.8, else uncertain.
+    // Age gate: Yes/No self-attestation via POST /verification/age { confirmed18Plus } — no AgeVerificationProvider.
+    // Thresholds in config: nudity cut >= 0.85, review 0.6-0.85; toxicity cut >= 0.9.
 
 ### 13.5 Weekly safety metrics (admin Overview)
 
@@ -339,7 +336,7 @@ Time to cut a violating stream, reports per 1,000 calls, false-positive cut rate
     FIELD_ENCRYPTION_KEY=base64-32-bytes
     LIVEKIT_URL=ws://localhost:7880  LIVEKIT_API_KEY=devkey  LIVEKIT_API_SECRET=devsecret
     S3_ENDPOINT=http://localhost:9000  S3_BUCKET=talkdrop-evidence  S3_ACCESS_KEY=minio  S3_SECRET_KEY=minio123
-    SMS_PROVIDER=mock  EMAIL_PROVIDER=mock  AGE_PROVIDER=mock  MODERATION_PROVIDER=mock
+    SMS_PROVIDER=mock  EMAIL_PROVIDER=mock  MODERATION_PROVIDER=mock
     MOD_NUDITY_CUT=0.85  MOD_NUDITY_REVIEW=0.6  MOD_TOXICITY_CUT=0.9
     EVIDENCE_TTL_HOURS=24  BLUR_FIRST_SECONDS=15  MATCH_WIDEN_AFTER_MS=8000
     WEB_ORIGIN=http://localhost:5173  API_ORIGIN=http://localhost:4000
@@ -351,7 +348,7 @@ Time to cut a violating stream, reports per 1,000 calls, false-positive cut rate
 | Phase                           | Deliverables                                                                                                                                                                                                                         | Done when                                                                                                                   |
 |---------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
 | **0 Foundation**                | Monorepo, tooling, Docker Compose (postgres, redis, minio, livekit, coturn, mailhog), CI, Prisma schema + migrations + seed, shared package, UI tokens + base components (Section 4.4), Storybook (optional)                         | `pnpm dev` starts everything; migrations + seed run; CI green                                                               |
-| **1 Identity and onboarding**   | OTP auth (mock SMS provider), refresh rotation, route guards; age verification screen with on-device estimate + mock provider; onboarding (interests, mood, languages, toggles); profile and settings; landing page                  | New user can sign up, verify, pick interests and reach the lobby; all screens match mockups on desktop and mobile           |
+| **1 Identity and onboarding**   | Google / email auth, refresh rotation, route guards; Yes/No 18+ consent modal; onboarding (interests, mood, languages, toggles); profile and settings; landing page                                                                  | New user can sign up, confirm 18+, pick interests and reach the lobby; all screens match mockups on desktop and mobile      |
 | **2 Matching and calls**        | Socket gateway, Redis pool, matcher worker, session lifecycle, LiveKit tokens + webhooks, lobby, match-found, live call UI (controls, PiP, timer, blur-first, icebreakers, captions placeholder), next/end flows, reconnect handling | Two browsers get matched and see each other; Next requeues; concurrency test passes; p95 match under 2 s in load test       |
 | **3 Safety v1**                 | Report and block flows, evidence service, moderation queue API, gate checks, client-frame moderation endpoint with provider adapter, cut flow + modal, enforcement ladder, appeals, rate limits and abuse defences                   | Reporting ends a call, creates a case with evidence; a flagged frame (mock) cuts the call in under 2 s; bans block re-entry |
 | **4 Social**                    | After-call (vibe, compliments, keep), connections list, chat (real-time, unread, presence), call a connection, trust score and streak jobs                                                                                           | Mutual keep creates a connection; chat works across two browsers; trust tier updates                                        |

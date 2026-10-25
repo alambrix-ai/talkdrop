@@ -44,7 +44,6 @@ jobs:
       LIVEKIT_MOCK: 'true'
       S3_MOCK: 'true'
       SMS_PROVIDER: mock
-      AGE_PROVIDER: mock
       MODERATION_PROVIDER: mock
       GOOGLE_OAUTH_MOCK: 'true'
       WEB_ORIGIN: http://localhost:5173

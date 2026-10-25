@@ -65,6 +65,11 @@ export class UsersService {
       email: user.email,
       phoneE164Masked: maskedStoredPhone(user.phoneE164),
       ageVerified: user.ageVerified,
+      ageConsent: user.ageVerified
+        ? ('accepted' as const)
+        : user.ageConsentAt
+          ? ('declined' as const)
+          : ('pending' as const),
       trustScore: user.trustScore,
       trustTier: user.trustTier,
       status: user.status,

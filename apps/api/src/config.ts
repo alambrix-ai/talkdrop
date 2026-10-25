@@ -39,7 +39,6 @@ const envSchema = z.object({
     .optional()
     .transform((v) => v !== 'false'),
   SMS_PROVIDER: z.string().default('mock'),
-  AGE_PROVIDER: z.string().default('ondevice'),
   MODERATION_PROVIDER: z.string().default('mock'),
   STT_PROVIDER: z.string().default('local'),
   MT_PROVIDER: z.string().default('mymemory'),
@@ -116,9 +115,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (parsed.data.NODE_ENV === 'production') {
     if (parsed.data.LIVEKIT_MOCK) {
       throw new Error('LIVEKIT_MOCK=true is not allowed in production');
-    }
-    if (parsed.data.AGE_PROVIDER === 'mock') {
-      throw new Error('AGE_PROVIDER=mock is not allowed in production');
     }
     if (!parsed.data.GOOGLE_CLIENT_ID || !parsed.data.GOOGLE_CLIENT_SECRET) {
       throw new Error(

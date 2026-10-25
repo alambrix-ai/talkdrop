@@ -1,7 +1,7 @@
 import { Tag } from '@talkdrop/ui';
 
 const DEFAULT_TIPS = [
-  '18+ verified before matching',
+  '18+ confirmed before matching',
   'Blur-first + report/block one tap away',
   'No call recordings kept by default',
 ];

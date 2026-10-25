@@ -89,19 +89,9 @@ export const googleMockLoginSchema = z.object({
   deviceFingerprint: z.string().min(8).max(128).optional(),
 });
 
+/** Yes/No 18+ self-attestation — the only age gate. */
 export const ageVerificationSchema = z.object({
-  estimatedAge: z.number().min(0).max(120),
-  confidence: z.number().min(0).max(1),
-  liveness: z.boolean(),
-});
-
-export const verificationFallbackStartSchema = z.object({
-  method: z.enum(['phone', 'document']),
-});
-
-export const verificationFallbackCompleteSchema = z.object({
-  method: z.enum(['phone', 'document']),
-  providerRef: z.string().min(1).max(200),
+  confirmed18Plus: z.boolean(),
 });
 
 export const patchMeSchema = z.object({
@@ -206,6 +196,8 @@ export const meSchema = z.object({
   email: z.string().email().nullable().optional(),
   phoneE164Masked: z.string().nullable(),
   ageVerified: z.boolean(),
+  /** pending | accepted | declined — declined means they answered No (do not re-prompt as primary). */
+  ageConsent: z.enum(['pending', 'accepted', 'declined']),
   trustScore: z.number(),
   trustTier: TrustTier,
   status: z.string(),

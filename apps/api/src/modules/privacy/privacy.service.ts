@@ -24,6 +24,7 @@ export class PrivacyService {
         id: user.id,
         displayName: user.displayName,
         ageVerified: user.ageVerified,
+        ageConsentAt: user.ageConsentAt?.toISOString() ?? null,
         trustTier: user.trustTier,
         plan: user.plan,
         createdAt: user.createdAt.toISOString(),
@@ -41,7 +42,7 @@ export class PrivacyService {
         body: m.body,
         createdAt: m.createdAt.toISOString(),
       })),
-      note: 'Phone numbers are not exported in cleartext. Face/media are never stored. Enforcement/report rows may be retained under legal hold.',
+      note: 'Phone numbers are not exported in cleartext. Age consent is self-attestation only (no face/media). Enforcement/report rows may be retained under legal hold.',
     };
   }
 
@@ -87,6 +88,7 @@ export class PrivacyService {
           plan: 'free',
           status: 'banned',
           ageVerified: false,
+          ageConsentAt: null,
         },
       }),
     ]);

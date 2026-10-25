@@ -1,5 +1,4 @@
 import type {
-  AgeVerificationProvider,
   LiveKitProvider,
   ModerationProvider,
   SmsProvider,
@@ -8,7 +7,6 @@ import type {
   TranslationProvider,
 } from '@talkdrop/shared';
 import type { AppConfig } from '../config.js';
-import { createAgeProvider } from './age.js';
 import { createLiveKitProvider } from './livekit.js';
 import { createModerationProvider } from './moderation.js';
 import { createSmsProvider } from './sms.js';
@@ -17,7 +15,6 @@ import { createSttProvider, createTranslationProvider } from './captions.js';
 
 export interface Providers {
   sms: SmsProvider;
-  age: AgeVerificationProvider;
   moderation: ModerationProvider;
   storage: StorageProvider;
   livekit: LiveKitProvider;
@@ -28,7 +25,6 @@ export interface Providers {
 export async function createProviders(config: AppConfig): Promise<Providers> {
   return {
     sms: createSmsProvider(config.SMS_PROVIDER),
-    age: createAgeProvider(config.AGE_PROVIDER),
     moderation: createModerationProvider(config.MODERATION_PROVIDER),
     storage: createStorageProvider(config.S3_MOCK),
     livekit: await createLiveKitProvider({

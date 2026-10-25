@@ -46,7 +46,7 @@ async function main() {
   await json('/api/v1/verification/age', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ estimatedAge: 25, confidence: 0.95, liveness: true }),
+    body: JSON.stringify({ confirmed18Plus: true }),
   });
   await json('/api/v1/me', {
     method: 'PATCH',

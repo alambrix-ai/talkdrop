@@ -15,7 +15,7 @@ const COPY: Record<string, { title: string; body: string[] }> = {
     title: 'Privacy centre',
     body: [
       'We do not store raw video or audio by default. Evidence for reports is encrypted and expires in 24 hours unless a case is escalated.',
-      'Age checks prefer on-device estimation; only the result and age band are stored — never your face image or date of birth.',
+      'Age gate is a Yes/No 18+ confirmation stored on your account — we do not run camera age estimates or store face images or date of birth for age checks.',
       'Phone numbers are protected with field-level encryption. IPs are stored as hashes for abuse prevention.',
       'You can export or delete your data from Profile → Your data (GDPR/DPDP).',
       'Enterprise tenants may process additional policy metadata under their agreement.',
@@ -32,8 +32,8 @@ const COPY: Record<string, { title: string; body: string[] }> = {
   'age-notice': {
     title: '18+ notice',
     body: [
-      'Talkdrop is only for people aged 18 or older. Age verification is required before matching.',
-      'Accounts that fail verification cannot enter the matching pool. Suspected under-18 reports are escalated automatically.',
+      'Talkdrop is only for people aged 18 or older. You must confirm you are 18+ (Yes) before matching.',
+      'Choosing No locks matching for that account. Suspected under-18 reports are escalated automatically.',
       'Parents/guardians: contact hello@talkdrop.app if you believe a minor has created an account.',
     ],
   },

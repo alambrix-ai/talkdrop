@@ -106,8 +106,8 @@ pnpm dev
 | LiveKit SFU + room join | Compose LiveKit, `LIVEKIT_MOCK=false` | Prod LiveKit project |
 | Hidden mod subscriber | Token + rtc-node/meta sampler | `@livekit/rtc-node` for real frames |
 | Sign in with Google | `GOOGLE_OAUTH_MOCK=true` (dev/CI) | `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET` |
-| SMS (age fallback only) | `SMS_PROVIDER=mock` | `twilio` / `messagebird` + keys |
-| Age verification | On-device thresholds | `AGE_DOCUMENT_REDIRECT_URL` vendor |
+| SMS (optional / unused for auth) | `SMS_PROVIDER=mock` | `twilio` / `messagebird` + keys |
+| Age gate (18+) | Yes/No self-attestation | — (see `docs/AGE_VERIFICATION.md`) |
 | Captions STT | `STT_PROVIDER=local` streaming | `deepgram` / `whisper` keys |
 | Translation | `MT_PROVIDER=mymemory` or `identity` | LibreTranslate URL |
 | Co-draw / co-watch | Socket canvas + player | — |

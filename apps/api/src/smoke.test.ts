@@ -55,10 +55,11 @@ describe('API smoke', () => {
       method: 'POST',
       url: '/api/v1/verification/age',
       headers: { authorization: `Bearer ${accessToken}` },
-      payload: { estimatedAge: 25, confidence: 0.95, liveness: true },
+      payload: { confirmed18Plus: true },
     });
     expect(age.statusCode).toBe(200);
     expect(age.json().result).toBe('passed');
+    expect(age.json().ageConsent).toBe('accepted');
 
     const me = await app.inject({
       method: 'GET',
@@ -67,7 +68,45 @@ describe('API smoke', () => {
     });
     expect(me.statusCode).toBe(200);
     expect(me.json().ageVerified).toBe(true);
+    expect(me.json().ageConsent).toBe('accepted');
     expect(me.json().email).toBe(email);
+  });
+
+  it('18+ decline blocks matching and persists', async () => {
+    const email = `decline.${Date.now()}@gmail.com`;
+    const signin = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/google/mock',
+      payload: { email, displayName: 'Decline Test' },
+    });
+    expect(signin.statusCode).toBe(200);
+    const { accessToken } = signin.json() as { accessToken: string };
+
+    const age = await app.inject({
+      method: 'POST',
+      url: '/api/v1/verification/age',
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { confirmed18Plus: false },
+    });
+    expect(age.statusCode).toBe(200);
+    expect(age.json().result).toBe('failed');
+    expect(age.json().ageConsent).toBe('declined');
+
+    const me = await app.inject({
+      method: 'GET',
+      url: '/api/v1/me',
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    expect(me.json().ageVerified).toBe(false);
+    expect(me.json().ageConsent).toBe('declined');
+
+    const fallback = await app.inject({
+      method: 'POST',
+      url: '/api/v1/verification/fallback/start',
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { method: 'document' },
+    });
+    expect(fallback.statusCode).toBe(410);
   });
 
   it('email+password signup and login', async () => {

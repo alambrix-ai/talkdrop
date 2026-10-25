@@ -2,6 +2,15 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.5.0 — 2026-10-25
+
+### Age gate: Yes/No 18+ consent only
+- Replaced on-device camera age estimation, document-check fallback, and multi-step face-score thresholds with a single Yes/No modal after sign-in
+- `POST /verification/age` body is `{ confirmed18Plus: boolean }`; persists `age_verified` + `age_consent_at` (`ageConsent`: pending/accepted/declined on `/me`)
+- Fallback routes `/verification/fallback/*` return **410 Gone**; removed `AGE_PROVIDER` / `AGE_DOCUMENT_REDIRECT_URL`
+- Google sign-in stays separate; phone OTP is not reintroduced
+- Docs: `docs/AGE_VERIFICATION.md`, SPEC/FRONTEND/BACKEND/README/SECURITY_AUDIT copy updated
+
 ## 0.4.1 — 2026-10-25
 
 ### Bugfix: brand portraits in Docker web image

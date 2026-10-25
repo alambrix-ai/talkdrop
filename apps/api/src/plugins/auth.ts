@@ -51,7 +51,7 @@ export async function registerAuth(app: FastifyInstance, config: AppConfig): Pro
   app.decorate('authenticateVerified', async (req: FastifyRequest) => {
     req.user = await resolveUser(req, config);
     if (!req.user.ageVerified) {
-      throw new AppError('unverified', 'Age verification required', 403);
+      throw new AppError('unverified', '18+ confirmation required', 403);
     }
     if (req.user.status === 'suspended') {
       throw new AppError('suspended', 'Account suspended', 403);

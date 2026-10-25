@@ -27,6 +27,8 @@ enum VerificationMethod {
   face_estimate
   phone
   document
+  /// User confirmed 18+ via Yes/No consent (current product path)
+  self_attestation
 }
 
 enum VerificationResult {
@@ -121,6 +123,8 @@ model User {
   avatarUrl      String?       @map("avatar_url")
   birthYearRange String?       @map("birth_year_range")
   ageVerified    Boolean       @default(false) @map("age_verified")
+  /// Set when the user answers the 18+ Yes/No consent (accepted or declined).
+  ageConsentAt   DateTime?     @map("age_consent_at") @db.Timestamptz(6)
   trustScore     Int           @default(0) @map("trust_score")
   trustTier      TrustTier     @default(new) @map("trust_tier")
   status         AccountStatus @default(active)

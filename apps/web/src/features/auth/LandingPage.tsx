@@ -192,7 +192,7 @@ export default function LandingPage() {
         >
           <div style={{ display: 'grid', gap: 12 }}>
             {[
-              '18+ verification before anyone enters the pool',
+              '18+ Yes/No confirmation before anyone enters the pool',
               'Live frame and text moderation with an instant cut',
               'Report and block end the call for both people',
               'Evidence clips encrypted and deleted after 24 hours',

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Card, Input, Logo, ProgressBar, Tag } from '@talkdrop/ui';
+import { Button, Card, Input, Logo, Modal, Tag } from '@talkdrop/ui';
 import { api, ensureSession, setAccessToken } from '../../lib/api';
 import { useAppStore } from '../../lib/store';
 
-type Phase = 'auth' | 'age' | 'checking' | 'passed' | 'failed';
+type Phase = 'auth' | 'consent' | 'declined';
 type AuthMode = 'signin' | 'signup';
+type MeAge = { ageVerified: boolean; ageConsent?: 'pending' | 'accepted' | 'declined' };
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000/api/v1';
 const GOOGLE_MOCK =
@@ -20,9 +21,21 @@ export default function VerifyPage() {
   const [email, setEmail] = useState('you@gmail.com');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('Arjun K.');
-  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
+
+  function applyAgeGate(me: MeAge) {
+    if (me.ageVerified || me.ageConsent === 'accepted') {
+      navigate('/lobby');
+      return;
+    }
+    if (me.ageConsent === 'declined') {
+      setPhase('declined');
+      return;
+    }
+    setPhase('consent');
+  }
 
   useEffect(() => {
     const authError = searchParams.get('authError');
@@ -44,34 +57,17 @@ export default function VerifyPage() {
       try {
         const ok = await ensureSession();
         if (!ok) throw new Error('Session missing after Google sign-in');
-        const me = (await api('/me')) as { ageVerified: boolean };
+        const me = (await api('/me')) as MeAge;
         setMe(me as never);
-        if (me.ageVerified) {
-          navigate('/lobby');
-          return;
-        }
-        setPhase('age');
+        applyAgeGate(me);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not finish Google sign-in');
       } finally {
         setBusy(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per OAuth return
   }, [navigate, searchParams, setMe, setSearchParams]);
-
-  useEffect(() => {
-    if (phase !== 'checking') return;
-    let p = 0;
-    const id = setInterval(() => {
-      p += 8;
-      setProgress(Math.min(p, 100));
-      if (p >= 100) {
-        clearInterval(id);
-        void submitAge();
-      }
-    }, 120);
-    return () => clearInterval(id);
-  }, [phase]);
 
   function continueWithGoogle() {
     setError(null);
@@ -84,7 +80,7 @@ export default function VerifyPage() {
     try {
       const res = await api<{
         accessToken: string;
-        user: { ageVerified: boolean };
+        user: MeAge;
       }>('/auth/google/mock', {
         method: 'POST',
         json: {
@@ -95,13 +91,9 @@ export default function VerifyPage() {
         auth: false,
       });
       setAccessToken(res.accessToken);
-      if (res.user.ageVerified) {
-        const me = await api('/me');
-        setMe(me as never);
-        navigate('/lobby');
-        return;
-      }
-      setPhase('age');
+      const me = (await api('/me')) as MeAge;
+      setMe(me as never);
+      applyAgeGate(me);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Mock Google sign-in failed');
     } finally {
@@ -116,7 +108,7 @@ export default function VerifyPage() {
       const path = authMode === 'signup' ? '/auth/signup' : '/auth/login';
       const res = await api<{
         accessToken: string;
-        user: { ageVerified: boolean };
+        user: MeAge;
       }>(path, {
         method: 'POST',
         json: {
@@ -128,13 +120,9 @@ export default function VerifyPage() {
         auth: false,
       });
       setAccessToken(res.accessToken);
-      if (res.user.ageVerified) {
-        const me = await api('/me');
-        setMe(me as never);
-        navigate('/lobby');
-        return;
-      }
-      setPhase('age');
+      const me = (await api('/me')) as MeAge;
+      setMe(me as never);
+      applyAgeGate(me);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Sign-in failed');
     } finally {
@@ -142,31 +130,42 @@ export default function VerifyPage() {
     }
   }
 
-  async function submitAge() {
+  async function submitConsent(confirmed18Plus: boolean) {
+    setConsentBusy(true);
+    setError(null);
     try {
-      const res = await api<{ result: string }>('/verification/age', {
+      const res = await api<{
+        result: string;
+        ageVerified: boolean;
+        ageConsent: 'accepted' | 'declined';
+        message?: string;
+      }>('/verification/age', {
         method: 'POST',
-        json: { estimatedAge: 24, confidence: 0.92, liveness: true },
+        json: { confirmed18Plus },
       });
-      if (res.result === 'passed') {
-        setPhase('passed');
-        const me = await api('/me');
-        setMe(me as never);
-      } else {
-        setPhase('failed');
+      const me = (await api('/me')) as MeAge;
+      setMe(me as never);
+      if (res.ageVerified || res.ageConsent === 'accepted') {
+        navigate('/onboarding');
+        return;
       }
+      setPhase('declined');
+      if (res.message) setError(res.message);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Verification failed');
-      setPhase('failed');
+      setError(e instanceof Error ? e.message : 'Could not save your answer');
+    } finally {
+      setConsentBusy(false);
     }
   }
+
+  const showConsentModal = phase === 'consent';
 
   return (
     <div className="app">
       <header className="shell" style={{ paddingTop: 20, display: 'flex', justifyContent: 'space-between' }}>
         <Logo height={28} />
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <Tag variant="mint">Step 1 of 3 · Verify</Tag>
+          <Tag variant="mint">Step 1 of 3 · Confirm 18+</Tag>
           <Tag>2 · Interests</Tag>
           <Tag>3 · Meet</Tag>
         </div>
@@ -188,17 +187,17 @@ export default function VerifyPage() {
       >
         <div>
           <h1 className="h1" style={{ fontSize: 'clamp(34px, 4vw, 52px)' }}>
-            Adults only — quick check, then the fun starts.
+            Adults only — confirm once, then the fun starts.
           </h1>
           <p className="mute" style={{ marginTop: 14, fontSize: 17, maxWidth: 420 }}>
-            Talkdrop is a social hangout for verified 18+ people. We confirm age so everyone can
-            relax and play nice.
+            Talkdrop is a social hangout for people 18 and older. After you sign in, we ask a
+            simple Yes / No — no camera age scan, no ID upload.
           </p>
           <ul className="mute" style={{ marginTop: 20, lineHeight: 1.7, paddingLeft: 18 }}>
             <li>Sign in with Google (Gmail) — no phone code</li>
-            <li>Photo checked on your device — never uploaded</li>
-            <li>Only the age result is stored</li>
-            <li>A failed check never enters the hangout pool</li>
+            <li>Confirm you are 18+ with Yes or No</li>
+            <li>Your answer is saved so we do not ask again every refresh</li>
+            <li>No unlocks matching until you confirm you are 18+</li>
           </ul>
         </div>
 
@@ -292,90 +291,71 @@ export default function VerifyPage() {
                 </Button>
               </div>
             </>
+          ) : phase === 'declined' ? (
+            <>
+              <Tag variant="deep">Matching locked</Tag>
+              <h2 className="h3" style={{ marginTop: 12 }}>
+                You need to be 18 or older
+              </h2>
+              <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
+                You answered No. Talkdrop hangouts and matching stay locked for this account. If
+                you are 18 or older and answered by mistake, you can confirm below.
+              </p>
+              {error ? <p style={{ color: 'var(--alert)', marginTop: 12 }}>{error}</p> : null}
+              <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+                <Button disabled={consentBusy} onClick={() => void submitConsent(true)}>
+                  Yes — I am 18 or older
+                </Button>
+                <Button variant="ghost" onClick={() => navigate('/')}>
+                  Back to home
+                </Button>
+              </div>
+            </>
           ) : (
             <>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <h2 className="h3">Quick age check</h2>
-                <Tag variant="mint">On-device</Tag>
-              </div>
-              <div
-                style={{
-                  margin: '20px auto',
-                  width: 180,
-                  height: 220,
-                  borderRadius: '50% / 45%',
-                  border: '2px dashed var(--slate)',
-                  background: 'linear-gradient(160deg, var(--slate), var(--grey))',
-                }}
-                aria-hidden
-              />
-              <Tag>{phase === 'passed' ? 'Passed' : phase === 'failed' ? 'Failed' : 'Hold still for a moment'}</Tag>
-              <div style={{ marginTop: 14 }}>
-                <ProgressBar value={phase === 'passed' ? 100 : progress} label="Age check progress" />
-              </div>
-              <p style={{ marginTop: 12, fontWeight: 600 }}>
-                Estimated age range: {phase === 'failed' ? 'uncertain' : '18 and over'}
+              <Tag variant="mint">Almost there</Tag>
+              <h2 className="h3" style={{ marginTop: 12 }}>
+                Confirm you are 18+
+              </h2>
+              <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
+                A short Yes / No popup is open so we can unlock matching for adults only.
               </p>
-              {phase === 'age' ? (
-                <Button style={{ marginTop: 16, width: '100%' }} onClick={() => setPhase('checking')}>
-                  Start camera check
-                </Button>
-              ) : null}
-              {phase === 'passed' ? (
-                <Button style={{ marginTop: 16, width: '100%' }} onClick={() => navigate('/onboarding')}>
-                  Continue
-                </Button>
-              ) : null}
-              {phase === 'failed' ? (
-                <div style={{ display: 'grid', gap: 8, marginTop: 16 }}>
-                  <Button
-                    onClick={() =>
-                      void (async () => {
-                        const start = await api<{ pendingRef?: string }>(
-                          '/verification/fallback/start',
-                          { method: 'POST', json: { method: 'phone' } },
-                        );
-                        await api('/verification/fallback/complete', {
-                          method: 'POST',
-                          json: {
-                            method: 'phone',
-                            providerRef: start.pendingRef ?? 'mock',
-                          },
-                        });
-                        setPhase('passed');
-                        const me = await api('/me');
-                        setMe(me as never);
-                      })().catch((e) =>
-                        setError(e instanceof Error ? e.message : 'Fallback failed'),
-                      )
-                    }
-                  >
-                    Phone number code
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() =>
-                      void api<{ redirectUrl?: string }>('/verification/fallback/start', {
-                        method: 'POST',
-                        json: { method: 'document' },
-                      }).then((r) => {
-                        if (r.redirectUrl) window.location.href = r.redirectUrl;
-                      })
-                    }
-                  >
-                    ID document
-                  </Button>
-                </div>
-              ) : null}
-              {error ? <p style={{ color: 'var(--alert)', marginTop: 12 }}>{error}</p> : null}
-              <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-                <Tag>Phone number code</Tag>
-                <Tag>ID document</Tag>
-              </div>
             </>
           )}
         </Card>
       </main>
+
+      <Modal
+        open={showConsentModal}
+        title="Are you 18 or older?"
+        onClose={() => {
+          /* Must answer — Escape/backdrop should not skip consent */
+        }}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              disabled={consentBusy}
+              onClick={() => void submitConsent(false)}
+              style={{ flex: 1 }}
+            >
+              No
+            </Button>
+            <Button disabled={consentBusy} onClick={() => void submitConsent(true)} style={{ flex: 1 }}>
+              Yes
+            </Button>
+          </>
+        }
+      >
+        <p className="mute" style={{ margin: 0, fontSize: 15, lineHeight: 1.55 }}>
+          Talkdrop is only for adults. Tap <strong>Yes</strong> if you are 18 or older to continue.
+          Tap <strong>No</strong> if you are under 18 — matching will stay locked.
+        </p>
+        {error && phase === 'consent' ? (
+          <p style={{ color: 'var(--alert)', marginTop: 12, marginBottom: 0 }}>{error}</p>
+        ) : null}
+      </Modal>
+
       <style>{`
         @media (max-width: 768px) {
           main.shell.page { grid-template-columns: 1fr !important; }

@@ -6,11 +6,20 @@ export type AccountStatus = z.infer<typeof AccountStatus>;
 export const TrustTier = z.enum(['new', 'bronze', 'silver', 'gold', 'platinum', 'flagged']);
 export type TrustTier = z.infer<typeof TrustTier>;
 
-export const VerificationMethod = z.enum(['face_estimate', 'phone', 'document']);
+export const VerificationMethod = z.enum([
+  'face_estimate',
+  'phone',
+  'document',
+  'self_attestation',
+]);
 export type VerificationMethod = z.infer<typeof VerificationMethod>;
 
 export const VerificationResult = z.enum(['passed', 'uncertain', 'failed']);
 export type VerificationResult = z.infer<typeof VerificationResult>;
+
+/** Durable 18+ consent state for matching gate. */
+export const AgeConsentStatus = z.enum(['pending', 'accepted', 'declined']);
+export type AgeConsentStatus = z.infer<typeof AgeConsentStatus>;
 
 export const SessionStatus = z.enum(['matching', 'connecting', 'live', 'ended', 'cut']);
 export type SessionStatus = z.infer<typeof SessionStatus>;
