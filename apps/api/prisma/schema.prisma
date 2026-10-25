@@ -113,6 +113,10 @@ model User {
   /// SHA-256 of E.164 for lookup; phoneE164 holds AES-GCM ciphertext when encrypted
   phoneHash      String?       @unique @map("phone_hash")
   email          String?       @unique @db.Citext
+  /// Argon2id hash for email+password secondary auth (optional when Google-only)
+  passwordHash   String?       @map("password_hash")
+  /// Google OIDC `sub` — primary identity for Sign in with Google
+  googleSub      String?       @unique @map("google_sub")
   displayName    String        @map("display_name")
   avatarUrl      String?       @map("avatar_url")
   birthYearRange String?       @map("birth_year_range")

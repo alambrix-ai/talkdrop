@@ -29,15 +29,62 @@ export const apiErrorSchema = z.object({
   }),
 });
 
+/** @deprecated Phone OTP sign-in removed — use Google OAuth or email+password. */
 export const otpRequestSchema = z.object({
   phoneE164: z
     .string()
     .regex(/^\+[1-9]\d{6,14}$/, 'Phone must be E.164 format'),
 });
 
+/** @deprecated Phone OTP sign-in removed — use Google OAuth or email+password. */
 export const otpVerifySchema = z.object({
   phoneE164: z.string().regex(/^\+[1-9]\d{6,14}$/),
   code: z.string().min(4).max(8),
+  displayName: z.string().min(1).max(80).optional(),
+  deviceFingerprint: z.string().min(8).max(128).optional(),
+});
+
+const emailField = z
+  .string()
+  .trim()
+  .email('Valid email required')
+  .max(254)
+  .transform((v) => v.toLowerCase());
+
+const passwordField = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .max(128, 'Password too long');
+
+/** Secondary path: create account with email + password. */
+export const emailSignupSchema = z.object({
+  email: emailField,
+  password: passwordField,
+  displayName: z.string().min(1).max(80).optional(),
+  deviceFingerprint: z.string().min(8).max(128).optional(),
+});
+
+/** Secondary path: sign in with email + password. */
+export const emailLoginSchema = z.object({
+  email: emailField,
+  password: z.string().min(1).max(128),
+  deviceFingerprint: z.string().min(8).max(128).optional(),
+});
+
+/** Google Identity Services / One Tap: verify ID token server-side. */
+export const googleIdTokenSchema = z.object({
+  idToken: z.string().min(20).max(8192),
+  displayName: z.string().min(1).max(80).optional(),
+  deviceFingerprint: z.string().min(8).max(128).optional(),
+});
+
+/**
+ * Dev/test only: mock Google login when GOOGLE_OAUTH_MOCK is enabled.
+ * Never available in production.
+ */
+export const googleMockLoginSchema = z.object({
+  email: emailField,
+  googleSub: z.string().min(3).max(128).optional(),
   displayName: z.string().min(1).max(80).optional(),
   deviceFingerprint: z.string().min(8).max(128).optional(),
 });
@@ -156,6 +203,7 @@ export const sessionSummarySchema = z.object({
 export const meSchema = z.object({
   id: z.string().uuid(),
   displayName: z.string(),
+  email: z.string().email().nullable().optional(),
   phoneE164Masked: z.string().nullable(),
   ageVerified: z.boolean(),
   trustScore: z.number(),
@@ -187,6 +235,10 @@ export const meSchema = z.object({
 
 export type OtpRequest = z.infer<typeof otpRequestSchema>;
 export type OtpVerify = z.infer<typeof otpVerifySchema>;
+export type EmailSignup = z.infer<typeof emailSignupSchema>;
+export type EmailLogin = z.infer<typeof emailLoginSchema>;
+export type GoogleIdTokenLogin = z.infer<typeof googleIdTokenSchema>;
+export type GoogleMockLogin = z.infer<typeof googleMockLoginSchema>;
 export type AgeVerificationInput = z.infer<typeof ageVerificationSchema>;
 export type PatchMe = z.infer<typeof patchMeSchema>;
 export type PutInterests = z.infer<typeof putInterestsSchema>;

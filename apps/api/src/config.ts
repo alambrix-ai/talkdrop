@@ -55,6 +55,17 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().default(4000),
   /** Talkdrop Plus billing stays mock until payments launch (intentionally deferred). */
   BILLING_PROVIDER: z.string().default('mock'),
+  /** Google OAuth (Sign in with Google). Required in production. */
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  /**
+   * Allow POST /auth/google/mock in non-production (CI/local without Google credentials).
+   * Forced off in production regardless of value.
+   */
+  GOOGLE_OAUTH_MOCK: z
+    .string()
+    .optional()
+    .transform((v) => v === 'true' || v === '1'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
@@ -108,6 +119,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     }
     if (parsed.data.AGE_PROVIDER === 'mock') {
       throw new Error('AGE_PROVIDER=mock is not allowed in production');
+    }
+    if (!parsed.data.GOOGLE_CLIENT_ID || !parsed.data.GOOGLE_CLIENT_SECRET) {
+      throw new Error(
+        'Production requires GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET for Sign in with Google',
+      );
+    }
+    if (parsed.data.GOOGLE_OAUTH_MOCK) {
+      throw new Error('GOOGLE_OAUTH_MOCK is not allowed in production');
     }
   }
   if (env === process.env) cached = parsed.data;

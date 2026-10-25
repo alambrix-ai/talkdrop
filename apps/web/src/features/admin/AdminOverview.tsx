@@ -23,7 +23,7 @@ export default function AdminOverview() {
     return (
       <Card style={{ padding: 24 }}>
         <h1 className="h2">Admin access required</h1>
-        <p className="mute">Sign in as a tenant admin (seed user Arjun or Priya).</p>
+        <p className="mute">Sign in as a tenant admin (seed: arjun@gmail.com / TalkdropDev1!).</p>
       </Card>
     );
   }

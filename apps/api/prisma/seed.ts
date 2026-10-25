@@ -2,8 +2,12 @@ import { PrismaClient } from '@prisma/client';
 import { INTERESTS } from '@talkdrop/shared';
 import { createHash } from 'node:crypto';
 import { encryptField } from '../src/lib/crypto.js';
+import { hashPassword } from '../src/lib/passwords.js';
 
 const prisma = new PrismaClient();
+
+/** Dev seed password for email+password secondary auth (not for production). */
+const SEED_PASSWORD = 'TalkdropDev1!';
 
 function phoneHash(phone: string): string {
   return createHash('sha256').update(phone.trim()).digest('hex');
@@ -88,6 +92,7 @@ async function main() {
 
   async function upsertUser(input: {
     phone: string;
+    email: string;
     name: string;
     city: string;
     languages: string[];
@@ -100,7 +105,10 @@ async function main() {
   }) {
     const hash = phoneHash(input.phone);
     const encrypted = encPhone(input.phone);
+    const email = input.email.trim().toLowerCase();
+    const passwordHash = await hashPassword(SEED_PASSWORD);
     const existing =
+      (await prisma.user.findUnique({ where: { email } })) ??
       (await prisma.user.findUnique({ where: { phoneHash: hash } })) ??
       (await prisma.user.findUnique({ where: { phoneE164: input.phone } }));
     const user = existing
@@ -109,6 +117,8 @@ async function main() {
           data: {
             phoneE164: encrypted,
             phoneHash: hash,
+            email,
+            passwordHash,
             displayName: input.name,
             ageVerified: true,
             trustTier: input.trustTier,
@@ -121,6 +131,8 @@ async function main() {
           data: {
             phoneE164: encrypted,
             phoneHash: hash,
+            email,
+            passwordHash,
             displayName: input.name,
             ageVerified: true,
             birthYearRange: '18-24',
@@ -178,6 +190,7 @@ async function main() {
 
   const arjun = await upsertUser({
     phone: '+919876543210',
+    email: 'arjun@gmail.com',
     name: 'Arjun K.',
     city: 'Delhi',
     languages: ['en', 'hi'],
@@ -191,6 +204,7 @@ async function main() {
 
   const mei = await upsertUser({
     phone: '+819012345678',
+    email: 'mei@gmail.com',
     name: 'Mei',
     city: 'Tokyo',
     languages: ['ja', 'en'],
@@ -203,6 +217,7 @@ async function main() {
 
   const lucia = await upsertUser({
     phone: '+34600111222',
+    email: 'lucia@gmail.com',
     name: 'Lucia',
     city: 'Madrid',
     languages: ['es', 'en'],
@@ -215,6 +230,7 @@ async function main() {
 
   const kofi = await upsertUser({
     phone: '+233201112233',
+    email: 'kofi@gmail.com',
     name: 'Kofi',
     city: 'Accra',
     languages: ['en'],
@@ -227,6 +243,7 @@ async function main() {
 
   const priya = await upsertUser({
     phone: '+919811122233',
+    email: 'priya@gmail.com',
     name: 'Priya S.',
     city: 'Bengaluru',
     languages: ['en', 'hi'],
@@ -240,6 +257,7 @@ async function main() {
 
   const tomas = await upsertUser({
     phone: '+351910000001',
+    email: 'tomas@gmail.com',
     name: 'Tomás',
     city: 'Lisbon',
     languages: ['pt', 'en', 'es'],
@@ -429,7 +447,9 @@ async function main() {
   }
 
   console.log('Seeded Talkdrop demo data.');
-  console.log('Demo phones: Arjun +919876543210, Mei +819012345678 (OTP shown in API logs).');
+  console.log(
+    'Demo auth: Sign in with Google (mock) or email+password — arjun@gmail.com / TalkdropDev1!',
+  );
 }
 
 main()

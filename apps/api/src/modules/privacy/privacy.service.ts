@@ -77,6 +77,8 @@ export class PrivacyService {
           phoneE164: null,
           phoneHash: null,
           email: null,
+          passwordHash: null,
+          googleSub: null,
           avatarUrl: null,
           birthYearRange: null,
           region: null,

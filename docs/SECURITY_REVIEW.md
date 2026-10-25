@@ -3,7 +3,7 @@
 Working checklist for launch prep (SPEC §14 / §15 Phase 6). Full findings + remediations: [`SECURITY_AUDIT.md`](./SECURITY_AUDIT.md).
 
 ## Auth & sessions
-- [x] Phone OTP only for end users; refresh cookie httpOnly + SameSite (Strict in prod)
+- [x] Sign in with Google (OIDC) primary + email/password secondary; refresh cookie httpOnly + SameSite (Strict in prod); phone OTP sign-in retired
 - [x] Access JWT short-lived (memory-only on web); refresh rotation on `/auth/refresh`
 - [x] OTP hashed (sha256) + timing-safe compare; phones hashed + encrypted at rest
 - [x] Origin check on cookie refresh/logout
