@@ -108,7 +108,6 @@ export default function VerifyPage() {
         setBusy(false);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per OAuth return
   }, [navigate, searchParams, setMe, setSearchParams]);
 
   function continueWithGoogle() {
