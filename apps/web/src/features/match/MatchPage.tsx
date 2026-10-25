@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ClientEvents } from '@talkdrop/shared';
 import { Button, Card, Tag, VideoTile } from '@talkdrop/ui';
 import { connectSocket } from '../../lib/socket';
+import { portraitForName, PORTRAITS } from '../../lib/portraits';
 import { useAppStore } from '../../lib/store';
 
 export default function MatchPage() {
@@ -44,6 +45,9 @@ export default function MatchPage() {
 
   const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
   const ss = String(seconds % 60).padStart(2, '0');
+  const partnerPortrait = portraitForName(match.partner.displayName);
+  const selfPortrait =
+    partnerPortrait.src === PORTRAITS.mei.src ? PORTRAITS.tomas : PORTRAITS.mei;
 
   return (
     <main className="shell page portal-fade">
@@ -70,9 +74,22 @@ export default function MatchPage() {
         <div style={{ position: 'relative' }}>
           <VideoTile
             blurred
+            placeholder={false}
+            imageSrc={partnerPortrait.src}
+            imageAlt={match.partner.displayName}
             style={{ width: '100%', aspectRatio: '16/11', minHeight: 280 }}
             overlays={
-              <div style={{ position: 'absolute', left: 16, bottom: 16, display: 'flex', gap: 8 }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 16,
+                  bottom: 16,
+                  display: 'flex',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  zIndex: 3,
+                }}
+              >
                 <Tag variant="mint">
                   {match.partner.displayName}
                   {match.partner.city ? ` · ${match.partner.city}` : ''}
@@ -82,6 +99,9 @@ export default function MatchPage() {
             }
           />
           <VideoTile
+            placeholder={false}
+            imageSrc={selfPortrait.src}
+            imageAlt="You"
             style={{
               position: 'absolute',
               right: 16,
@@ -90,12 +110,15 @@ export default function MatchPage() {
               height: 160,
               borderRadius: 16,
               border: '2px solid var(--white)',
+              zIndex: 4,
             }}
-            overlays={<Tag style={{ position: 'absolute', left: 8, bottom: 8 }}>You</Tag>}
+            overlays={
+              <Tag style={{ position: 'absolute', left: 8, bottom: 8, zIndex: 3 }}>You</Tag>
+            }
           />
         </div>
 
-        <Card style={{ padding: 22 }}>
+        <Card tone="cream" style={{ padding: 22 }}>
           <div className="mute" style={{ fontSize: 13, fontWeight: 700 }}>
             YOU BOTH LIKE
           </div>

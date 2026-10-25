@@ -9,10 +9,11 @@ import {
   ServerEvents,
   type MatchFound,
 } from '@talkdrop/shared';
-import { Button, Card, Orb, Tag } from '@talkdrop/ui';
+import { Button, Card, Orb, Tag, VideoTile } from '@talkdrop/ui';
 import { LocalVideo } from '../../components/LocalVideo';
 import { SafetyStrip } from '../../components/SafetyStrip';
 import { api } from '../../lib/api';
+import { PORTRAITS } from '../../lib/portraits';
 import { connectSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
 
@@ -196,6 +197,30 @@ export default function LobbyPage() {
         </Card>
         <Card style={{ padding: 18 }}>
           <div style={{ fontWeight: 700, marginBottom: 10 }}>Hangouts tonight</div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              marginBottom: 14,
+              alignItems: 'center',
+            }}
+          >
+            <VideoTile
+              placeholder={false}
+              imageSrc={PORTRAITS.mei.src}
+              imageAlt={PORTRAITS.mei.label}
+              style={{ width: 56, height: 72, borderRadius: 14, flex: 'none' }}
+            />
+            <VideoTile
+              placeholder={false}
+              imageSrc={PORTRAITS.tomas.src}
+              imageAlt={PORTRAITS.tomas.label}
+              style={{ width: 56, height: 72, borderRadius: 14, flex: 'none', transform: 'rotate(4deg)' }}
+            />
+            <div style={{ fontSize: 13 }} className="mute">
+              Soft previews stay ink-wash until you jump in — blur + AI safety still on.
+            </div>
+          </div>
           {(rooms.data ?? []).slice(0, 4).map((r) => (
             <div
               key={r.id}

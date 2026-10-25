@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { Button, Card, Logo, Tag, VideoTile } from '@talkdrop/ui';
 import { SafetyStrip } from '../../components/SafetyStrip';
 import { api } from '../../lib/api';
+import { PORTRAITS } from '../../lib/portraits';
 
 export default function LandingPage() {
   const stats = useQuery({
@@ -71,6 +72,9 @@ export default function LandingPage() {
           >
             <VideoTile
               className="hero-tile-a"
+              placeholder={false}
+              imageSrc={PORTRAITS.mei.src}
+              imageAlt={PORTRAITS.mei.label}
               style={{
                 width: '68%',
                 aspectRatio: '3/4',
@@ -78,13 +82,16 @@ export default function LandingPage() {
                 boxShadow: 'var(--shadow)',
               }}
               overlays={
-                <span className="tag mint" style={{ position: 'absolute', left: 12, bottom: 12 }}>
-                  Mei, 24
+                <span className="tag mint" style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 3 }}>
+                  {PORTRAITS.mei.label}
                 </span>
               }
             />
             <VideoTile
               className="hero-tile-b"
+              placeholder={false}
+              imageSrc={PORTRAITS.tomas.src}
+              imageAlt={PORTRAITS.tomas.label}
               style={{
                 width: '58%',
                 aspectRatio: '3/4',
@@ -95,8 +102,8 @@ export default function LandingPage() {
                 boxShadow: 'var(--shadow)',
               }}
               overlays={
-                <span className="tag mint" style={{ position: 'absolute', left: 12, bottom: 12 }}>
-                  Tomás, 26
+                <span className="tag mint" style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 3 }}>
+                  {PORTRAITS.tomas.label}
                 </span>
               }
             />
@@ -109,6 +116,7 @@ export default function LandingPage() {
                 padding: 16,
                 width: 'min(280px, 80%)',
                 boxShadow: 'var(--shadow)',
+                zIndex: 4,
               }}
             >
               <div style={{ fontSize: 13, fontWeight: 700 }}>You both like</div>
