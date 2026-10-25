@@ -1,0 +1,35 @@
+# Build context for apps/*/Dockerfile (repo root as context).
+#
+# CRITICAL: Do not exclude apps/web/public/, brand/, or image extensions
+# (*.jpg / *.png / *.svg). Vite copies public/ into dist; missing files
+# here means broken /brand/portraits/* URLs in the nginx image.
+
+.git
+.github
+.cursor
+**/.DS_Store
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/.vite
+**/.cache
+**/coverage
+**/playwright-report
+**/test-results
+**/*.tsbuildinfo
+**/*.log
+**/.evidence-store
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+
+.env
+.env.*
+!.env.example
+
+# Non-runtime trees (not required for web/api/worker images)
+docs
+talkdrop-brief
+infra/terraform
+infra/helm
+infra/load

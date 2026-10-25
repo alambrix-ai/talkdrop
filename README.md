@@ -35,6 +35,28 @@ pnpm dev:infra
 
 Postgres, Redis, MinIO, **LiveKit** (`:7880`, keys `devkey`/`secret`), Mailhog.
 
+### Web Docker image (static SPA + brand portraits)
+
+Landing/match portraits live under `apps/web/public/brand/portraits/` and must be copied into the nginx image. Build and run:
+
+```bash
+pnpm docker:web:build   # or: docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml build web
+pnpm docker:web:up      # serves http://localhost:8080
+```
+
+Verify files are in the image and served:
+
+```bash
+# JPEG magic bytes from inside the container
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.app.yml run --rm --no-deps web \
+  wget -q -O - http://127.0.0.1/brand/portraits/mei.jpg | head -c 3 | od -An -tx1
+# expect: ff d8 ff
+
+curl -fsSI http://localhost:8080/brand/portraits/mei.jpg
+curl -fsSI http://localhost:8080/brand/portraits/tomas.jpg
+# After a local Vite build (no Docker): pnpm --filter @talkdrop/web build && pnpm verify:web-brand
+```
+
 ### 2. Env
 
 ```bash
@@ -99,6 +121,8 @@ pnpm dev
 | `pnpm lint` / `typecheck` / `test` | Quality gates |
 | `pnpm --filter @talkdrop/web test:e2e` | Playwright §16 (API on `:4000`; LiveKit optional) |
 | `pnpm build` | Build all |
+| `pnpm docker:web:build` / `docker:web:up` | nginx image with `/brand/portraits/*` |
+| `pnpm verify:web-brand` | Assert Vite dist includes brand portraits |
 
 ## Safety
 
