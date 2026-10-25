@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import {
+  ServerEvents,
   adminDecisionSchema,
   adminPolicySchema,
   ageVerificationSchema,
@@ -22,6 +23,7 @@ import { AppError, toErrorPayload } from '../lib/errors.js';
 import { prisma } from '../lib/prisma.js';
 import { safeEqual, sha256 } from '../lib/crypto.js';
 import type { Providers } from '../providers/index.js';
+import type { SocketHub } from '../plugins/socket.js';
 import { AuthService } from './auth/auth.service.js';
 import { UsersService } from './users/users.service.js';
 import { VerificationService } from './verification/verification.service.js';
@@ -142,6 +144,7 @@ export async function registerRoutes(
   config: AppConfig,
   services: Services,
   providers: Providers,
+  hub?: SocketHub,
 ): Promise<void> {
   const cookieOpts = {
     path: '/',
@@ -385,7 +388,21 @@ export async function registerRoutes(
     async (req) => {
       const { id } = req.params as { id: string };
       const body = parse(sendMessageSchema, req.body);
-      return services.connections.send(id, req.user!.id, body.body, providers.moderation);
+      const msg = await services.connections.send(
+        id,
+        req.user!.id,
+        body.body,
+        providers.moderation,
+      );
+      // REST send previously skipped realtime notify — peer chat stayed stale.
+      if (hub) {
+        const conn = await services.connections.get(id, req.user!.id);
+        if (conn.peer.id) {
+          hub.emitToUser(conn.peer.id, ServerEvents.CHAT_MESSAGE, msg);
+        }
+        hub.emitToUser(req.user!.id, ServerEvents.CHAT_MESSAGE, msg);
+      }
+      return msg;
     },
   );
 
@@ -394,7 +411,18 @@ export async function registerRoutes(
     { preHandler: [app.authenticateVerified] },
     async (req) => {
       const { id } = req.params as { id: string };
-      return services.connections.startCall(id, req.user!.id, providers, config.BLUR_FIRST_SECONDS);
+      const result = await services.connections.startCall(
+        id,
+        req.user!.id,
+        providers,
+        config.BLUR_FIRST_SECONDS,
+      );
+      if (hub) {
+        hub.emitToUser(result.peerId, ServerEvents.CALL_INCOMING, result.incoming);
+      }
+      // Never return peer LiveKit credentials to the caller.
+      const { incoming: _incoming, peerId: _peerId, ...client } = result;
+      return client;
     },
   );
 

@@ -2,6 +2,14 @@
 
 All notable changes to Talkdrop are documented in this file.
 
+## 0.3.3 — 2026-10-25
+
+### Bugfixes (video call + chat loading)
+- Auth bootstrap no longer sticks on “Restoring session…” after a hard refresh when refresh fails; navigates to verify instead
+- Connection video calls emit `call:incoming` so the peer can join; REST chat send notifies peers over the socket
+- LiveKit local preview attach race + remote audio attach; `.env.example` LiveKit secret aligned with Compose SFU
+- In-call Chat control opens the connection thread; CallPage joins the session socket room
+
 ## 0.3.2 — 2026-10-25
 
 ### Security hardening (Critical / High / Medium)

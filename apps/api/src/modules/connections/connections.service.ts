@@ -129,6 +129,7 @@ export class ConnectionsService {
   async startCall(connectionId: string, userId: string, providers: Providers, blurSeconds: number) {
     const c = await this.get(connectionId, userId);
     const peerId = c.peer.id!;
+    const caller = await prisma.user.findUnique({ where: { id: userId } });
     const ice = await prisma.icebreaker.findFirst({ where: { active: true } });
     const session = await prisma.session.create({
       data: {
@@ -144,17 +145,32 @@ export class ConnectionsService {
     const room = session.id;
     await prisma.session.update({ where: { id: session.id }, data: { livekitRoom: room } });
     await providers.livekit.createRoom(room);
-    // Only mint the caller's token — peer fetches their own via GET /sessions/:id (participant-gated).
-    const token = await providers.livekit.createToken({
+    // Caller token in the HTTP response. Peer token is only for CALL_INCOMING to that peer
+    // (never returned to the caller — avoids SFU impersonation).
+    const livekit = await providers.livekit.createToken({
       roomName: room,
       identity: userId,
-      name: 'You',
+      name: caller?.displayName ?? 'You',
+    });
+    const peerLivekit = await providers.livekit.createToken({
+      roomName: room,
+      identity: peerId,
+      name: c.peer.displayName ?? 'Friend',
     });
     return {
       sessionId: session.id,
       peerId,
-      livekit: token,
+      livekit,
       blurUntilMs: Date.now() + blurSeconds * 1000,
+      incoming: {
+        connectionId,
+        sessionId: session.id,
+        from: {
+          displayName: caller?.displayName ?? 'Someone',
+          userId,
+        },
+        livekit: peerLivekit,
+      },
     };
   }
 }

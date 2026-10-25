@@ -40,15 +40,28 @@ export async function connectLiveKitRoom(opts: {
 
   let remoteEl: HTMLVideoElement | null = null;
   let localEl: HTMLVideoElement | null = null;
+  const attachedAudio = new Set<string>();
+
+  const attachRemoteTrack = (track: RemoteTrack) => {
+    if (track.kind === Track.Kind.Video && remoteEl) {
+      track.attach(remoteEl);
+      return;
+    }
+    if (track.kind === Track.Kind.Audio) {
+      // Audio needs an element; attach() creates/returns one when no el is passed.
+      const sid = track.sid ?? track.mediaStreamTrack?.id;
+      if (!sid || attachedAudio.has(sid)) return;
+      track.attach();
+      attachedAudio.add(sid);
+    }
+  };
 
   const bindRemote = (
     track: RemoteTrack,
     _publication: RemoteTrackPublication,
     _participant: RemoteParticipant,
   ) => {
-    if (track.kind === Track.Kind.Video && remoteEl) {
-      track.attach(remoteEl);
-    }
+    attachRemoteTrack(track);
   };
 
   room.on(RoomEvent.TrackSubscribed, bindRemote);
@@ -56,9 +69,7 @@ export async function connectLiveKitRoom(opts: {
   const attachExisting = () => {
     for (const p of room.remoteParticipants.values()) {
       for (const pub of p.trackPublications.values()) {
-        if (pub.track && pub.kind === Track.Kind.Video && remoteEl) {
-          pub.track.attach(remoteEl);
-        }
+        if (pub.track) attachRemoteTrack(pub.track);
       }
     }
     if (localEl) {
