@@ -108,6 +108,9 @@ export default function ProfilePage() {
 
         <Card style={{ padding: 24 }}>
           <h2 className="h3">Privacy and safety</h2>
+          <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
+            Defaults lean private. Hang out freely — keep control.
+          </p>
           <div style={{ display: 'grid', gap: 14, marginTop: 16 }}>
             <Switch
               label="Blur my first 15 seconds"
@@ -134,7 +137,8 @@ export default function ProfilePage() {
               }}
             />
             <Switch label="Translate to English (Plus)" checked={false} onChange={() => undefined} disabled />
-            <div className="mute">Blocked people — manage from Connections</div>
+            <div className="mute">Blocked people — manage from Friends</div>
+            <Tag variant="mint">Report and block stay one tap away on every call</Tag>
           </div>
         </Card>
 

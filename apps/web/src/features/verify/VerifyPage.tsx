@@ -122,12 +122,16 @@ export default function VerifyPage() {
       >
         <div>
           <h1 className="h1" style={{ fontSize: 'clamp(34px, 4vw, 52px)' }}>
-            Let us confirm you are 18 or older.
+            Adults only — quick check, then the fun starts.
           </h1>
+          <p className="mute" style={{ marginTop: 14, fontSize: 17, maxWidth: 420 }}>
+            Talkdrop is a social hangout for verified 18+ people. We confirm age so everyone can
+            relax and play nice.
+          </p>
           <ul className="mute" style={{ marginTop: 20, lineHeight: 1.7, paddingLeft: 18 }}>
-            <li>Photo checked on device and never uploaded</li>
+            <li>Photo checked on your device — never uploaded</li>
             <li>Only the age result is stored</li>
-            <li>A failed check never enters the matching pool</li>
+            <li>A failed check never enters the hangout pool</li>
           </ul>
         </div>
 

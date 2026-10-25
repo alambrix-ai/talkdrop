@@ -73,9 +73,9 @@ test.describe('SPEC §16 critical path', () => {
 
     await pageA.goto('/lobby');
     await pageB.goto('/lobby');
-    await expect(pageA.getByRole('button', { name: /Start meeting/i })).toBeVisible();
-    await pageA.getByRole('button', { name: /Start meeting/i }).click();
-    await pageB.getByRole('button', { name: /Start meeting/i }).click();
+    await expect(pageA.getByRole('button', { name: /Start hanging out/i })).toBeVisible();
+    await pageA.getByRole('button', { name: /Start hanging out/i }).click();
+    await pageB.getByRole('button', { name: /Start hanging out/i }).click();
 
     await expect(pageA).toHaveURL(/\/match/, { timeout: 20_000 });
     await expect(pageB).toHaveURL(/\/match/, { timeout: 20_000 });
@@ -94,9 +94,9 @@ test.describe('SPEC §16 critical path', () => {
     void joinA;
 
     // Create a session via matching: re-queue both quickly
-    await pageA.getByRole('button', { name: /Start meeting/i }).click();
+    await pageA.getByRole('button', { name: /Start hanging out/i }).click();
     await pageB.goto('/lobby');
-    await pageB.getByRole('button', { name: /Start meeting/i }).click();
+    await pageB.getByRole('button', { name: /Start hanging out/i }).click();
     await expect(pageA).toHaveURL(/\/match/, { timeout: 20_000 });
     const matchUrl = pageA.url();
     await pageA.getByRole('button', { name: /Join the call/i }).click();
@@ -162,8 +162,8 @@ test.describe('SPEC §16 critical path', () => {
 
     await pageA.goto('/lobby');
     await pageB.goto('/lobby');
-    await pageA.getByRole('button', { name: /Start meeting/i }).click();
-    await pageB.getByRole('button', { name: /Start meeting/i }).click();
+    await pageA.getByRole('button', { name: /Start hanging out/i }).click();
+    await pageB.getByRole('button', { name: /Start hanging out/i }).click();
     await expect(pageA).toHaveURL(/\/match/, { timeout: 20_000 });
     await pageA.getByRole('button', { name: /Join the call/i }).click();
     await expect(pageA).toHaveURL(/\/call\//, { timeout: 10_000 });

@@ -65,7 +65,7 @@ export default function AfterPage() {
           <div>
             <Tag>Call ended · {mm}:{ss}</Tag>
             <h1 className="h2" style={{ marginTop: 8 }}>
-              That was a good one.
+              Nice hang. Want another?
             </h1>
             <p className="mute" style={{ margin: '6px 0 0' }}>
               {partner?.displayName}
@@ -128,14 +128,17 @@ export default function AfterPage() {
         ) : null}
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 24 }}>
-          <Button onClick={() => void keep()}>Keep in touch</Button>
+          <Button onClick={() => void keep()}>Keep hanging out</Button>
           <Button variant="ghost" onClick={() => navigate('/lobby')}>
-            Next person
+            Next vibe
           </Button>
           <Link to="/lobby">
             <Button variant="ghost">Back to lobby</Button>
           </Link>
         </div>
+        <p className="mute" style={{ fontSize: 13, marginTop: 16 }}>
+          Mutual keep creates a private chat. You can block anytime from Friends.
+        </p>
       </div>
 
       <div style={{ display: 'grid', gap: 14, alignContent: 'start' }}>
@@ -164,9 +167,9 @@ export default function AfterPage() {
             Tonight so far
           </div>
           <div style={{ marginTop: 8, display: 'grid', gap: 4 }}>
-            <div>Conversations 4</div>
+            <div>Hangouts 4</div>
             <div>Time chatting 31 min</div>
-            <div>New connections 1</div>
+            <div>New friends 1</div>
           </div>
         </Card>
       </div>

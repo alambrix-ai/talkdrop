@@ -46,13 +46,17 @@ export default function MatchPage() {
   const ss = String(seconds % 60).padStart(2, '0');
 
   return (
-    <main className="shell page">
+    <main className="shell page portal-fade">
       <Tag variant="mint">
         Match found · {mm}:{ss}
       </Tag>
       <h1 className="h2" style={{ marginTop: 12 }}>
-        Found someone who likes {match.sharedInterests.slice(0, 2).join(' and ') || 'your vibe'}.
+        Someone who likes {match.sharedInterests.slice(0, 2).join(' and ') || 'your vibe'} just
+        dropped in.
       </h1>
+      <p className="mute" style={{ marginTop: 8 }}>
+        Blur stays on for the first 15 seconds. Jump in or skip — no hard feelings.
+      </p>
 
       <div
         style={{
@@ -102,16 +106,17 @@ export default function MatchPage() {
               </Tag>
             ))}
           </div>
-          <p style={{ marginTop: 18, fontWeight: 700 }}>ICEBREAKER</p>
+          <p style={{ marginTop: 18, fontWeight: 700 }}>EASY OPENER</p>
           <p style={{ marginTop: 6 }}>{match.icebreaker}</p>
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
             {match.partner.verified ? <Tag variant="mint">Verified 18+</Tag> : null}
             <Tag variant="deep">Trust: {match.partner.trustTier}</Tag>
+            <Tag variant="mint">AI safety on</Tag>
           </div>
           <div style={{ display: 'grid', gap: 10, marginTop: 24 }}>
-            <Button onClick={join}>Join the call</Button>
+            <Button onClick={join}>Jump into the hangout</Button>
             <Button variant="ghost" onClick={decline}>
-              Find someone else
+              Skip — find someone else
             </Button>
           </div>
         </Card>

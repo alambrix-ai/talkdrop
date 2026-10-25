@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Button, Card, Tag, VideoTile } from '@talkdrop/ui';
+import { Button, Card, Logo, Tag, VideoTile } from '@talkdrop/ui';
+import { SafetyStrip } from '../../components/SafetyStrip';
 import { api } from '../../lib/api';
 
 export default function LandingPage() {
@@ -17,10 +18,12 @@ export default function LandingPage() {
   });
 
   const online = stats.data?.online ?? 128400;
+  const medianMin = Math.floor((stats.data?.medianConversationSec ?? 402) / 60);
+  const medianSec = String((stats.data?.medianConversationSec ?? 402) % 60).padStart(2, '0');
 
   return (
     <main>
-      <section className="shell page" style={{ paddingTop: 40 }}>
+      <section className="shell page" style={{ paddingTop: 28 }}>
         <div
           style={{
             display: 'grid',
@@ -30,29 +33,32 @@ export default function LandingPage() {
           }}
           className="hero-grid"
         >
-          <div>
+          <div className="wash-in">
             <Tag variant="mint">
-              <span className="live" /> {online.toLocaleString()} people online now
+              <span className="live" /> {online.toLocaleString()} people hanging out now
             </Tag>
-            <h1 className="h1" style={{ marginTop: 20 }}>
-              Meet someone new, live. Without the weirdness.
+            <div style={{ marginTop: 22 }}>
+              <Logo height={56} />
+            </div>
+            <h1 className="h1" style={{ marginTop: 18, maxWidth: 560 }}>
+              Drop in. Hit it off. Keep it light.
             </h1>
             <p className="mute" style={{ marginTop: 16, fontSize: 18, maxWidth: 480 }}>
-              Talkdrop is interest-first video chat with verified adults, live AI safety, and
-              openers that make the first ten seconds easy.
+              Live video hangouts with people who share your vibe — icebreakers, co-play, and
+              safety that stays on so the fun never gets weird.
             </p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 28 }}>
               <Link to="/verify">
-                <Button>Start a conversation</Button>
+                <Button>Start hanging out</Button>
               </Link>
               <a href="#safety">
-                <Button variant="ghost">See how safety works</Button>
+                <Button variant="ghost">How we keep it safe</Button>
               </a>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 20 }}>
               <Tag variant="deep">18+ verified</Tag>
               <Tag variant="deep">Live AI moderation</Tag>
-              <Tag variant="deep">No recordings kept</Tag>
+              <Tag variant="deep">Privacy-first defaults</Tag>
             </div>
           </div>
 
@@ -60,6 +66,7 @@ export default function LandingPage() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
+            className="float-soft"
             style={{ position: 'relative', minHeight: 420 }}
           >
             <VideoTile
@@ -118,6 +125,10 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="shell" style={{ paddingBottom: 36 }}>
+        <SafetyStrip />
+      </section>
+
       <section className="shell" style={{ paddingBottom: 48 }}>
         <div
           style={{
@@ -128,34 +139,53 @@ export default function LandingPage() {
           className="stats-grid"
         >
           <Stat label="Online now" value={online.toLocaleString()} />
-          <Stat label="Median conversation" value="6 min 42 s" />
-          <Stat label="Reports / 1,000 calls" value="1.8" />
-          <Stat label="Languages" value="41" />
+          <Stat label="Typical hang" value={`${medianMin} min ${medianSec} s`} />
+          <Stat
+            label="Reports / 1,000 calls"
+            value={String(stats.data?.reportsPer1000 ?? 1.8)}
+          />
+          <Stat label="Languages" value={String(stats.data?.languages ?? 41)} />
         </div>
       </section>
 
       <section className="shell" style={{ paddingBottom: 64 }}>
-        <h2 className="h2">How it works</h2>
+        <h2 className="h2">Three beats to the hangout</h2>
+        <p className="mute" style={{ marginTop: 8, maxWidth: 520 }}>
+          No corporate onboarding maze — just verify, pick a vibe, and say hey.
+        </p>
         <div
           style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 24 }}
           className="three-col"
         >
-          <Step title="Verify once" body="On-device age check. Your face never leaves your device." />
-          <Step title="Pick your vibe" body="Interests, mood, and languages steer who you meet." />
-          <Step title="Say hello" body="Blur-first start, AI icebreakers, then talk when you are ready." />
+          <Step
+            title="Verify once"
+            body="Quick on-device age check. Your face stays on your phone — only the pass/fail result is stored."
+          />
+          <Step
+            title="Pick your vibe"
+            body="Interests, mood, and languages steer who you meet. Chill, curious, debate, or play a game."
+          />
+          <Step
+            title="Drop in live"
+            body="Blur-first start, playful openers, then talk, co-draw, or co-watch when it clicks."
+          />
         </div>
       </section>
 
       <section id="safety" className="shell" style={{ paddingBottom: 64 }}>
-        <h2 className="h2">Safety you can see</h2>
+        <h2 className="h2">Fun first. Safety always.</h2>
+        <p className="mute" style={{ marginTop: 8, maxWidth: 540 }}>
+          Entertainment energy does not mean anything-goes. Consent, reporting, and privacy defaults
+          are built into every hangout — not buried in a footer.
+        </p>
         <div
           style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 20, marginTop: 24 }}
           className="two-col"
         >
           <div style={{ display: 'grid', gap: 12 }}>
             {[
-              '18+ verification before matching',
-              'Live frame and text moderation with instant cut',
+              '18+ verification before anyone enters the pool',
+              'Live frame and text moderation with an instant cut',
               'Report and block end the call for both people',
               'Evidence clips encrypted and deleted after 24 hours',
             ].map((t) => (
@@ -173,52 +203,93 @@ export default function LandingPage() {
             </h3>
             <p className="mute" style={{ marginTop: 10 }}>
               Talkdrop samples low-resolution frames for classifiers — never stores raw video or
-              audio by default.
+              audio by default. You stay in control with blur-first and camera-by-consent.
             </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 16 }}>
+              <Tag variant="deep">Blur first 15 s</Tag>
+              <Tag variant="deep">Camera by consent</Tag>
+              <Tag variant="deep">Report / block</Tag>
+            </div>
           </Card>
         </div>
       </section>
 
       <section className="shell" style={{ paddingBottom: 64 }}>
-        <h2 className="h2">Rooms and activities</h2>
-        <p className="mute" style={{ marginTop: 8 }}>Coming in v1 — preview tonight&apos;s ideas.</p>
+        <h2 className="h2">Tonight&apos;s hangouts</h2>
+        <p className="mute" style={{ marginTop: 8 }}>
+          Drop into themed rooms when you want a shared vibe — coming soon, preview tonight.
+        </p>
         <div
           style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginTop: 24 }}
           className="three-col"
         >
           <Card style={{ padding: 20 }}>
             <Tag>8:30 PM</Tag>
-            <h3 className="h3" style={{ marginTop: 12 }}>Speak Spanish night</h3>
+            <h3 className="h3" style={{ marginTop: 12 }}>
+              Speak Spanish night
+            </h3>
+            <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
+              Warm-up chats, soft music, zero awkward silence.
+            </p>
           </Card>
           <Card style={{ padding: 20 }}>
             <Tag>9:00 PM</Tag>
-            <h3 className="h3" style={{ marginTop: 12 }}>Startup pitch roulette</h3>
+            <h3 className="h3" style={{ marginTop: 12 }}>
+              Pitch roulette
+            </h3>
+            <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
+              Two-minute wild ideas. Clap, remix, next.
+            </p>
           </Card>
           <Card style={{ padding: 20 }}>
             <Tag>Open</Tag>
-            <h3 className="h3" style={{ marginTop: 12 }}>Lo-fi listening room</h3>
+            <h3 className="h3" style={{ marginTop: 12 }}>
+              Lo-fi listening room
+            </h3>
+            <p className="mute" style={{ marginTop: 8, fontSize: 14 }}>
+              Co-watch beats and chat when the mood hits.
+            </p>
           </Card>
         </div>
       </section>
 
       <section className="shell" style={{ paddingBottom: 80 }}>
-        <Card tone="cream" style={{ padding: 32, justifyContent: 'center', display: 'grid', gap: 12, justifyItems: 'center' }}>
-          <h2 className="h2" style={{ textAlign: 'center' }}>
-            For teams and communities
+        <Card
+          tone="cream"
+          style={{
+            padding: 36,
+            textAlign: 'center',
+            display: 'grid',
+            gap: 14,
+            justifyItems: 'center',
+          }}
+        >
+          <Tag variant="mint">Adults only · 18+</Tag>
+          <h2 className="h2" style={{ textAlign: 'center', maxWidth: 640 }}>
+            Ready for a low-stakes, high-smile hangout?
           </h2>
-          <p className="mute" style={{ textAlign: 'center', maxWidth: 520 }}>
-            White-label language exchanges, campus events, and brand spaces with moderation you can
-            audit.
+          <p className="mute" style={{ textAlign: 'center', maxWidth: 480 }}>
+            Meet someone new in minutes. Keep the ones who click. Skip the rest — with privacy and
+            safety still on.
           </p>
-          <Link to="/admin">
-            <Button>Talk to sales</Button>
+          <Link to="/verify">
+            <Button>Jump in</Button>
           </Link>
         </Card>
       </section>
 
-      <footer className="shell" style={{ paddingBottom: 40, border: '1px solid var(--line)' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, paddingTop: 24, fontSize: 14 }}>
-          <span className="mute">© Talkdrop</span>
+      <footer className="shell" style={{ paddingBottom: 40, borderTop: '1px solid var(--line)' }}>
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 16,
+            paddingTop: 24,
+            fontSize: 14,
+            alignItems: 'center',
+          }}
+        >
+          <span className="mute">© Talkdrop — hang out kindly</span>
           <Link to="/legal/age-notice">18+ only</Link>
           <Link to="/legal/community-rules">Community rules</Link>
           <Link to="/legal/privacy">Privacy centre</Link>
@@ -232,6 +303,7 @@ export default function LandingPage() {
         @media (max-width: 768px) {
           .hero-grid, .stats-grid, .three-col, .two-col { grid-template-columns: 1fr !important; }
           .hero-grid { gap: 28px !important; }
+          .float-soft { animation: none; }
         }
       `}</style>
     </main>
