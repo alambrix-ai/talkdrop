@@ -479,13 +479,16 @@ export default function CallPage() {
           <Tag>
             <span style={{ fontVariantNumeric: 'tabular-nums' }}>{timer}</span>
           </Tag>
-          {lkConnected ? <Tag variant="mint">LiveKit</Tag> : null}
+          {blurred ? <Tag>Blur on</Tag> : null}
         </div>
         <div style={{ marginTop: 10 }}>
           <Tag variant="mint">
             <span className="live" aria-hidden /> AI safety on
           </Tag>
         </div>
+        <p className="mute" style={{ fontSize: 12, margin: '8px 0 0' }}>
+          Be kind. Flag anything off — it ends the call for both.
+        </p>
         <Button
           size="sm"
           variant="ghost"
@@ -493,7 +496,7 @@ export default function CallPage() {
           onClick={() => setReportOpen(true)}
           aria-label={`Report ${partner?.displayName ?? 'partner'}`}
         >
-          Flag
+          Report / block
         </Button>
       </Card>
 
@@ -572,10 +575,10 @@ export default function CallPage() {
           maxWidth: 360,
         }}
       >
-        <div style={{ fontSize: 12, fontWeight: 700 }}>ICEBREAKER</div>
+        <div style={{ fontSize: 12, fontWeight: 700 }}>EASY OPENER</div>
         <div style={{ marginTop: 4 }}>{icebreaker}</div>
         <Button size="sm" variant="ghost" style={{ marginTop: 8 }} onClick={() => void rotateIcebreaker()}>
-          Another
+          Another spark
         </Button>
       </Card>
 
@@ -676,7 +679,7 @@ export default function CallPage() {
           Av
         </Button>
         <Button onClick={() => void next()} aria-label="Next person">
-          Next
+          Next vibe
         </Button>
         <Button
           size="icon"
@@ -780,11 +783,11 @@ export default function CallPage() {
 
       <Modal
         open={cutOpen}
-        title="Call ended by safety"
+        title="Hangout ended for safety"
         onClose={() => navigate('/lobby')}
         footer={<Button onClick={() => navigate('/lobby')}>Back to lobby</Button>}
       >
-        <p>{cutMessage || 'This call was ended by our safety systems.'}</p>
+        <p>{cutMessage || 'This hangout was ended by our safety systems — thanks for keeping Talkdrop kind.'}</p>
       </Modal>
     </div>
   );

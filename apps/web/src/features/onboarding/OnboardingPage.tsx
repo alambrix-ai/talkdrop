@@ -12,6 +12,7 @@ import {
   type Gender,
 } from '@talkdrop/shared';
 import { Button, Card, Chip, Switch, Tag } from '@talkdrop/ui';
+import { SafetyStrip } from '../../components/SafetyStrip';
 import { api } from '../../lib/api';
 import { useAppStore } from '../../lib/store';
 
@@ -96,10 +97,10 @@ export default function OnboardingPage() {
           <Tag>3 · Meet</Tag>
         </div>
         <h1 className="h1" style={{ fontSize: 'clamp(34px, 4vw, 52px)' }}>
-          What are you into?
+          What&apos;s your hangout vibe?
         </h1>
         <p className="mute" style={{ marginTop: 8 }}>
-          {selected.length} selected · pick {MIN_INTERESTS}–{MAX_INTERESTS}
+          {selected.length} picked · grab {MIN_INTERESTS}–{MAX_INTERESTS} so we can find your people
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 18 }}>
           {INTERESTS.map((i) => (
@@ -114,7 +115,7 @@ export default function OnboardingPage() {
         </div>
 
         <h2 className="h3" style={{ marginTop: 36 }}>
-          Mood
+          Tonight&apos;s mood
         </h2>
         <div
           style={{
@@ -171,7 +172,7 @@ export default function OnboardingPage() {
           Gender
         </h2>
         <p className="mute" style={{ marginTop: 4, fontSize: 14 }}>
-          Shown only for matching preferences — keep it honest.
+          Used only for match prefs — never sold, never shown as a profile billboard.
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
           {GENDERS.map((g) => (
@@ -203,18 +204,31 @@ export default function OnboardingPage() {
           right now. Typical wait about{' '}
           {Math.round((estimate.data?.estimatedWaitMs ?? 3000) / 1000)} seconds.
         </p>
+        <div style={{ marginTop: 16 }}>
+          <SafetyStrip
+            compact
+            tips={['Privacy defaults are on — tweak only if you want']}
+          />
+        </div>
         <div style={{ display: 'grid', gap: 14, marginTop: 20 }}>
           <Switch
-            label="Blur my first 15 seconds"
+            label="Blur my first 15 seconds (recommended)"
             checked={blurFirst}
             onChange={setBlurFirst}
             disabled={me?.trustTier === 'new'}
           />
-          <Switch label="Avatar first, camera by consent" checked={avatarFirst} onChange={setAvatarFirst} />
+          <Switch
+            label="Avatar first, camera by consent"
+            checked={avatarFirst}
+            onChange={setAvatarFirst}
+          />
           <Switch label="Live captions" checked={captions} onChange={setCaptions} />
         </div>
+        <p className="mute" style={{ fontSize: 13, marginTop: 12 }}>
+          New accounts keep blur locked on. Report and block stay available on every call.
+        </p>
         <Button
-          style={{ width: '100%', marginTop: 24 }}
+          style={{ width: '100%', marginTop: 20 }}
           disabled={!canContinue}
           loading={saving}
           onClick={() => void submit()}

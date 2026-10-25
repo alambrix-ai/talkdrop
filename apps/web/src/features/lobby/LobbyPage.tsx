@@ -9,9 +9,11 @@ import {
   ServerEvents,
   type MatchFound,
 } from '@talkdrop/shared';
-import { Button, Card, Orb, Tag } from '@talkdrop/ui';
+import { Button, Card, Orb, Tag, VideoTile } from '@talkdrop/ui';
 import { LocalVideo } from '../../components/LocalVideo';
+import { SafetyStrip } from '../../components/SafetyStrip';
 import { api } from '../../lib/api';
+import { PORTRAITS } from '../../lib/portraits';
 import { connectSocket } from '../../lib/socket';
 import { useAppStore } from '../../lib/store';
 
@@ -97,9 +99,18 @@ export default function LobbyPage() {
         </h1>
         <p className="mute" id="lobby-status" aria-live="polite">
           {waiting
-            ? waitHint ?? 'Looking for someone who shares your vibe…'
-            : 'People online who match your interests are a few seconds away.'}
+            ? waitHint ?? 'Scanning for someone who shares your vibe…'
+            : 'Your people are a few seconds away — jump in whenever.'}
         </p>
+        <div style={{ width: 'min(640px, 100%)' }}>
+          <SafetyStrip
+            tips={[
+              'Tip: keep blur on for the first vibe-check',
+              'Flag anything off — report ends the call for both',
+              'Adults only · Verified 18+',
+            ]}
+          />
+        </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
           {me?.interests.slice(0, 6).map((i) => (
             <Tag key={i.slug} variant="rose">
@@ -153,7 +164,7 @@ export default function LobbyPage() {
           loading={waiting}
           onClick={startMeeting}
         >
-          Start meeting
+          {waiting ? 'Finding someone…' : 'Start hanging out'}
         </Button>
       </div>
 
@@ -172,18 +183,44 @@ export default function LobbyPage() {
             <LocalVideo muted cameraOff={false} />
           </div>
           <div>
-            <div style={{ fontWeight: 700 }}>Camera and mic ready</div>
+            <div style={{ fontWeight: 700 }}>You look good — camera and mic ready</div>
             <div className="mute" style={{ fontSize: 14 }}>
               Blur first 15 s {me?.profile.blurFirst ? 'on' : 'off'}
               {me?.profile.avatarFirst ? ' · Avatar first' : ''}
+              {' · '}
+              Privacy defaults respected
             </div>
             <Link to="/onboarding" style={{ fontWeight: 600, fontSize: 14 }}>
-              Edit
+              Tweak vibe
             </Link>
           </div>
         </Card>
         <Card style={{ padding: 18 }}>
-          <div style={{ fontWeight: 700, marginBottom: 10 }}>Rooms tonight</div>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Hangouts tonight</div>
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              marginBottom: 14,
+              alignItems: 'center',
+            }}
+          >
+            <VideoTile
+              placeholder={false}
+              imageSrc={PORTRAITS.mei.src}
+              imageAlt={PORTRAITS.mei.label}
+              style={{ width: 56, height: 72, borderRadius: 14, flex: 'none' }}
+            />
+            <VideoTile
+              placeholder={false}
+              imageSrc={PORTRAITS.tomas.src}
+              imageAlt={PORTRAITS.tomas.label}
+              style={{ width: 56, height: 72, borderRadius: 14, flex: 'none', transform: 'rotate(4deg)' }}
+            />
+            <div style={{ fontSize: 13 }} className="mute">
+              Soft previews stay ink-wash until you jump in — blur + AI safety still on.
+            </div>
+          </div>
           {(rooms.data ?? []).slice(0, 4).map((r) => (
             <div
               key={r.id}

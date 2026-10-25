@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Talkdrop — safe, interest-first 1:1 video chat",
+  "description": "Talkdrop — fun, social video hangouts with safety on by default",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20"

@@ -32,6 +32,7 @@ interface Msg {
 export default function ConnectionsPage() {
   const { id } = useParams();
   const me = useAppStore((s) => s.me);
+  const setToast = useAppStore((s) => s.setToast);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [draft, setDraft] = useState('');
@@ -98,8 +99,11 @@ export default function ConnectionsPage() {
       }}
     >
       <Card style={{ padding: 12, overflow: 'auto' }}>
+        <div style={{ fontWeight: 700, marginBottom: 10, fontFamily: 'var(--font-display)' }}>
+          Friends you kept
+        </div>
         <Input
-          placeholder="Search"
+          placeholder="Find a friend"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Search connections"
@@ -132,7 +136,7 @@ export default function ConnectionsPage() {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {c.lastMessage?.body ?? 'Say hello'}
+                  {c.lastMessage?.body ?? 'Say hey — keep the hang going'}
                 </div>
               </div>
             </Link>
@@ -157,7 +161,7 @@ export default function ConnectionsPage() {
                 <strong>{selected.peer.displayName}</strong>
               </div>
               <Button size="sm" onClick={() => void callPeer()}>
-                Video call
+                Hang out live
               </Button>
             </div>
             <div style={{ padding: 16, overflow: 'auto', display: 'grid', gap: 10 }}>
@@ -171,17 +175,7 @@ export default function ConnectionsPage() {
                 (messages.data ?? []).map((m) => {
                   const mine = m.senderId === me?.id;
                   return (
-                    <div
-                      key={m.id}
-                      style={{
-                        justifySelf: mine ? 'end' : 'start',
-                        maxWidth: '75%',
-                        padding: '10px 14px',
-                        borderRadius: 18,
-                        background: mine ? 'var(--cream)' : 'var(--white)',
-                        border: mine ? 'none' : '1px solid var(--line)',
-                      }}
-                    >
+                    <div key={m.id} className={['chat-bubble', mine ? 'mine' : 'theirs'].join(' ')}>
                       {m.body}
                     </div>
                   );
@@ -192,7 +186,7 @@ export default function ConnectionsPage() {
               <Input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
-                placeholder="Write a message"
+                placeholder="Say something kind…"
                 aria-label="Message"
                 onKeyDown={(e) => e.key === 'Enter' && void send()}
               />
@@ -201,7 +195,7 @@ export default function ConnectionsPage() {
           </>
         ) : (
           <div className="mute" style={{ padding: 24 }}>
-            Select a connection
+            Pick a friend to keep chatting — or jump back to the lobby for someone new.
           </div>
         )}
       </Card>
@@ -227,13 +221,18 @@ export default function ConnectionsPage() {
                 </Tag>
               ))}
             </div>
-            <div style={{ display: 'grid', gap: 8, marginTop: 20 }}>
+            <p className="mute" style={{ fontSize: 13, marginTop: 16 }}>
+              Safety stays with you — block anytime. Reports go to the moderation queue.
+            </p>
+            <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
               <Button
-                variant="ghost"
+                variant="danger"
                 size="sm"
                 onClick={() =>
                   selected.peer.id &&
-                  void api('/blocks', { method: 'POST', json: { userId: selected.peer.id } })
+                  void api('/blocks', { method: 'POST', json: { userId: selected.peer.id } }).then(
+                    () => setToast('Blocked. They cannot reach you.'),
+                  )
                 }
               >
                 Block

@@ -51,7 +51,8 @@ export function ReportSheet({
       }
     >
       <p className="mute" style={{ marginTop: 0 }}>
-        The call has ended for both of you.
+        Reporting ends the hangout for both of you right away. Thanks for helping keep Talkdrop
+        safe.
       </p>
       <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
         {(Object.keys(REPORT_CATEGORY_LABELS) as ReportCategory[]).map((key) => (
@@ -78,7 +79,8 @@ export function ReportSheet({
         Also block {name}
       </label>
       <p className="mute" style={{ fontSize: 13, marginTop: 12 }}>
-        A short clip is kept for review and deleted after 24 hours unless action is needed.
+        Privacy note: a short encrypted clip is kept for review and deleted after 24 hours unless
+        action is needed. We never keep full call recordings by default.
       </p>
     </Modal>
   );
